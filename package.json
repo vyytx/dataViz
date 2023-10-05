@@ -20,6 +20,7 @@
 		"rollup-plugin-svelte": "^7.1.6",
 		"sirv-cli": "^2.0.2",
 		"svelte": "^4.2.1",
-		"svelte-preprocess": "^5.0.4"
+		"svelte-preprocess": "^5.0.4",
+		"svelte-routing": "^2.5.0"
 	}
 }
