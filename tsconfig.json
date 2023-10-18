@@ -1,0 +1,20 @@
+{
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"target": "ES2022",
+		"verbatimModuleSyntax": true,
+		"sourceMap": true,
+
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+
+		"paths": {
+			"@/*": ["./src/script/*"]
+		}
+	},
+
+	"include": ["./src/script/*.ts"],
+	"exclude": ["node_modules/*", "public/*"]
+}
