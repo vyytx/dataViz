@@ -1,0 +1,78 @@
+<script lang='ts'>
+	//import { ChartSolid, HomeSolid } from 'flowbite-svelte-icons'
+    import { onMount } from 'svelte';
+
+	import { Pages } from '@/Pages'
+
+	export let nowViewing: typeof Pages[number]['name'] = 'Home'
+
+	//function navHandler(node) {
+		
+	//}
+
+</script>
+
+<div class="tabs is-large is-centered">
+	<ul>
+		{#each Pages as page, i}
+		<li class:active={nowViewing == page['name']} data-tooltip={page['name']} style="cursor: default;">
+			<a class='px-2' on:click={() => { nowViewing = page['name'] }}>
+				<span class='icon'> <svelte:component this={page['icon']} /> </span>
+			</a>
+		</li>
+		{/each}
+	</ul>
+</div>
+
+<style lang='scss'>
+	ul, a {
+		border: none;
+	}
+
+	.tabs {
+		padding-top: 3.5em;
+		padding-bottom: 1.5em;
+		margin-bottom: 0 !important;
+
+		& > ul {
+			height: 75%;
+			& > li {
+				position: relative;
+
+				& > a {
+					margin-left: 0.3em;
+					margin-right: 0.3em;
+					&> .icon {
+						width: 40px;
+						height: 40px;
+						color: #eeeeee;
+					}
+				}
+
+				&.active > a > .icon {
+					color: #ffffff;
+
+					&::after {
+						content: '';
+						display: block;
+						position: absolute;
+						left: 50%;
+						bottom: -1.5em;
+						margin-left: -0.75em;
+						border-bottom: solid 0.75em #ffffff;
+						border-left: solid 0.75em transparent;
+						border-right: solid 0.75em transparent;
+					}
+				}
+			}
+		}
+	}
+
+	li[data-tooltip] {
+		&::before {
+			width: 100%;
+			text-align: center;
+			font-size: 1rem !important;
+		}
+	}
+</style>
