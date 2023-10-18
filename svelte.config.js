@@ -8,19 +8,17 @@ const config = {
 		dev: true,
 	},
 	preprocess: [
-		//typescript({
-		//	tsconfigFile: true,
-		//}),
+		typescript({
+			tsconfigFile: './tsconfig.json'
+		}),
 		scss({
 			includePaths: ['src/scss', 'node_modules']
-		})
+		}),
 	],
 	onwarn: (warning, handler) => {
-		const ignores = [
-			'a11y-label-has-associated-control'
-		]
+		const ignores = []
 
-		if(ignores.indexOf(warning.code) > -1)
+		if(ignores.indexOf(warning.code) > -1 || warning.code.startsWith('a11y'))
 			return
 
 		handler(warning)

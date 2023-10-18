@@ -1,12 +1,15 @@
 import svelte from 'rollup-plugin-svelte'
+import typescript from '@rollup/plugin-typescript'
 import commonjs from '@rollup/plugin-commonjs'
 import resolve from '@rollup/plugin-node-resolve'
 import livereload from 'rollup-plugin-livereload'
 import css from 'rollup-plugin-css-only'
+ import json from '@rollup/plugin-json'
 
 import { spawn } from 'child_process'
 
 import svelteConfig from './svelte.config.js'
+import tsconfigJson from './tsconfig.json' assert { type: 'json' }
 
 const isDev = process.env.ROLLUP_WATCH
 
@@ -37,9 +40,9 @@ export default {
 	input: 'src/main.js',
 	output: {
 		sourcemap: true,
-		format: 'iife',
+		format: 'esm',
 		name: 'app',
-		file: 'public/build/bundle.js'
+		dir: 'public/build'
 	},
 	plugins: [
 		svelte({
@@ -53,7 +56,11 @@ export default {
 			browser: true,
 			dedupe: ['svelte']
 		}),
+		typescript(tsconfigJson),
 		commonjs(),
+		json({
+			compact: true
+		}),
 		isDev && serve(),
 		isDev && livereload('public'),
 	],
