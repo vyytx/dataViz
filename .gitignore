@@ -1,3 +1,7 @@
 node_modules
+.vscode
 
 public/build
+
+# Bad Apple
+.DS_Store
