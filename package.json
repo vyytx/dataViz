@@ -6,23 +6,34 @@
 	"type": "module",
 	"scripts": {
 		"build": "rollup -c",
-		"dev": "rollup -c -w",
+		"dev": "node --max-old-space-size=3072 node_modules/rollup/dist/bin/rollup -c -w",
 		"start": "sirv public --no-clear"
 	},
 	"author": "vyytx",
 	"license": "ISC",
 	"dependencies": {
+		"plotly.js": "^2.26.2",
+		"plotly.js-dist-min": "^2.26.2",
 		"sirv-cli": "^2.0.2"
 	},
 	"devDependencies": {
+		"@creativebulma/bulma-tooltip": "^1.2.0",
 		"@rollup/plugin-commonjs": "^25.0.4",
+		"@rollup/plugin-json": "^6.0.1",
 		"@rollup/plugin-node-resolve": "^15.2.1",
+		"@rollup/plugin-typescript": "^11.1.5",
+		"@tsconfig/svelte": "^5.0.2",
+		"bulma": "^0.9.4",
+		"flowbite-svelte-icons": "^0.4.4",
 		"rollup": "^3.29.4",
 		"rollup-plugin-css-only": "^4.3.0",
 		"rollup-plugin-livereload": "^2.0.5",
 		"rollup-plugin-svelte": "^7.1.6",
+		"sass": "^1.68.0",
 		"svelte": "^4.2.1",
 		"svelte-preprocess": "^5.0.4",
-		"svelte-routing": "^2.5.0"
+		"svelte-routing": "^2.5.0",
+		"tslib": "^2.6.2",
+		"typescript": "^5.2.2"
 	}
 }
