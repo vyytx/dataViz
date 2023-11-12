@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Pages } from '@/Pages'
 
-	export let nowViewing: typeof Pages[number]['name'] = 'Home'
+	export let nowViewing: typeof Pages[number]['name']
 
 	$: nowPage = Pages.find(p => p.name == nowViewing)
 </script>

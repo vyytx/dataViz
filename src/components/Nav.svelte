@@ -1,15 +1,16 @@
 <script lang='ts'>
-	//import { ChartSolid, HomeSolid } from 'flowbite-svelte-icons'
-    import { onMount } from 'svelte';
+	import Fa from 'svelte-fa/src/fa.svelte'
+	import { onMount } from 'svelte';
 
 	import { Pages } from '@/Pages'
 
-	export let nowViewing: typeof Pages[number]['name'] = 'Home'
+	export let nowViewing: typeof Pages[number]['name'];
 
-	//function navHandler(node) {
-		
-	//}
-
+	onMount(() => {
+		for(let faicon of document.getElementsByClassName('faicon')) {
+			(faicon as HTMLElement).style.height = 'auto';
+		}
+	})
 </script>
 
 <div class="tabs is-large is-centered">
@@ -17,14 +18,14 @@
 		{#each Pages as page, i}
 		<li class:active={nowViewing == page['name']} data-tooltip={page['name']} style="cursor: default;">
 			<a class='px-2' on:click={() => { nowViewing = page['name'] }}>
-				<span class='icon'> <svelte:component this={page['icon']} /> </span>
+				<span class='icon'> <Fa class="faicon" icon={page['icon']} /> </span>
 			</a>
 		</li>
 		{/each}
 	</ul>
 </div>
 
-<style lang='scss'>
+<style lang='scss'>	
 	ul, a {
 		border: none;
 	}
