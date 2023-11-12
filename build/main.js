@@ -1,19 +1,6 @@
 /** @returns {void} */
 function noop() {}
 
-/**
- * @template T
- * @template S
- * @param {T} tar
- * @param {S} src
- * @returns {T & S}
- */
-function assign(tar, src) {
-	// @ts-ignore
-	for (const k in src) tar[k] = src[k];
-	return /** @type {T & S} */ (tar);
-}
-
 function run(fn) {
 	return fn();
 }
@@ -46,21 +33,6 @@ function safe_not_equal(a, b) {
 /** @returns {boolean} */
 function is_empty(obj) {
 	return Object.keys(obj).length === 0;
-}
-
-/** @returns {{}} */
-function exclude_internal_props(props) {
-	const result = {};
-	for (const k in props) if (k[0] !== '$') result[k] = props[k];
-	return result;
-}
-
-/** @returns {{}} */
-function compute_rest_props(props, keys) {
-	const rest = {};
-	keys = new Set(keys);
-	for (const k in props) if (!keys.has(k) && k[0] !== '$') rest[k] = props[k];
-	return rest;
 }
 
 /**
@@ -162,17 +134,6 @@ function attr(node, attribute, value) {
 }
 
 /**
- * @param {Element & ElementCSSInlineStyle} node
- * @param {{ [x: string]: string }} attributes
- * @returns {void}
- */
-function set_svg_attributes(node, attributes) {
-	for (const key in attributes) {
-		attr(node, key, attributes[key]);
-	}
-}
-
-/**
  * @param {Element} element
  * @returns {ChildNode[]}
  */
@@ -262,35 +223,6 @@ function get_current_component() {
  */
 function onMount(fn) {
 	get_current_component().$$.on_mount.push(fn);
-}
-
-/**
- * Retrieves the context that belongs to the closest parent component with the specified `key`.
- * Must be called during component initialisation.
- *
- * https://svelte.dev/docs/svelte#getcontext
- * @template T
- * @param {any} key
- * @returns {T}
- */
-function getContext(key) {
-	return get_current_component().$$.context.get(key);
-}
-
-// TODO figure out if we still want to support
-// shorthand events, or if we want to implement
-// a real bubbling mechanism
-/**
- * @param component
- * @param event
- * @returns {void}
- */
-function bubble(component, event) {
-	const callbacks = component.$$.callbacks[event.type];
-	if (callbacks) {
-		// @ts-ignore
-		callbacks.slice().forEach((fn) => fn.call(this, event));
-	}
 }
 
 const dirty_components = [];
@@ -519,38 +451,6 @@ function ensure_array_like(array_like_or_iterator) {
 		: Array.from(array_like_or_iterator);
 }
 
-/** @returns {{}} */
-function get_spread_update(levels, updates) {
-	const update = {};
-	const to_null_out = {};
-	const accounted_for = { $$scope: 1 };
-	let i = levels.length;
-	while (i--) {
-		const o = levels[i];
-		const n = updates[i];
-		if (n) {
-			for (const key in o) {
-				if (!(key in n)) to_null_out[key] = 1;
-			}
-			for (const key in n) {
-				if (!accounted_for[key]) {
-					update[key] = n[key];
-					accounted_for[key] = 1;
-				}
-			}
-			levels[i] = n;
-		} else {
-			for (const key in o) {
-				accounted_for[key] = 1;
-			}
-		}
-	}
-	for (const key in to_null_out) {
-		if (!(key in update)) update[key] = undefined;
-	}
-	return update;
-}
-
 /** @returns {void} */
 function bind(component, name, callback) {
 	const index = component.$$.props[name];
@@ -767,3173 +667,517 @@ if (typeof window !== 'undefined')
 	// @ts-ignore
 	(window.__svelte || (window.__svelte = { v: new Set() })).v.add(PUBLIC_VERSION);
 
-/**
- * Adapted from https://github.com/reach/router/blob/b60e6dd781d5d3a4bdaaf4de665649c0f6a7e78d/src/lib/utils.js
- * https://github.com/reach/router/blob/master/LICENSE
- */
+const parseNumber = parseFloat;
 
-
-const canUseDOM = () =>
-    typeof window !== "undefined" &&
-    "document" in window &&
-    "location" in window;
-
-/**
- * Adapted from https://github.com/reach/router/blob/b60e6dd781d5d3a4bdaaf4de665649c0f6a7e78d/src/lib/history.js
- * https://github.com/reach/router/blob/master/LICENSE
- */
-
-const getLocation = (source) => {
-    return {
-        ...source.location,
-        state: source.history.state,
-        key: (source.history.state && source.history.state.key) || "initial",
-    };
-};
-const createHistory = (source) => {
-    const listeners = [];
-    let location = getLocation(source);
-
-    return {
-        get location() {
-            return location;
-        },
-
-        listen(listener) {
-            listeners.push(listener);
-
-            const popstateListener = () => {
-                location = getLocation(source);
-                listener({ location, action: "POP" });
-            };
-
-            source.addEventListener("popstate", popstateListener);
-
-            return () => {
-                source.removeEventListener("popstate", popstateListener);
-                const index = listeners.indexOf(listener);
-                listeners.splice(index, 1);
-            };
-        },
-
-        navigate(to, { state, replace = false, preserveScroll = false } = {}) {
-            state = { ...state, key: Date.now() + "" };
-            // try...catch iOS Safari limits to 100 pushState calls
-            try {
-                if (replace) source.history.replaceState(state, "", to);
-                else source.history.pushState(state, "", to);
-            } catch (e) {
-                source.location[replace ? "replace" : "assign"](to);
-            }
-            location = getLocation(source);
-            listeners.forEach((listener) =>
-                listener({ location, action: "PUSH", preserveScroll })
-            );
-            document.activeElement.blur();
-        },
-    };
-};
-// Stores history entries in memory for testing or other platforms like Native
-const createMemorySource = (initialPathname = "/") => {
-    let index = 0;
-    const stack = [{ pathname: initialPathname, search: "" }];
-    const states = [];
-
-    return {
-        get location() {
-            return stack[index];
-        },
-        addEventListener(name, fn) {},
-        removeEventListener(name, fn) {},
-        history: {
-            get entries() {
-                return stack;
-            },
-            get index() {
-                return index;
-            },
-            get state() {
-                return states[index];
-            },
-            pushState(state, _, uri) {
-                const [pathname, search = ""] = uri.split("?");
-                index++;
-                stack.push({ pathname, search });
-                states.push(state);
-            },
-            replaceState(state, _, uri) {
-                const [pathname, search = ""] = uri.split("?");
-                stack[index] = { pathname, search };
-                states[index] = state;
-            },
-        },
-    };
-};
-// Global history uses window.history as the source if available,
-// otherwise a memory history
-createHistory(
-    canUseDOM() ? window : createMemorySource()
-);
-
-/**
- * The code in this file is copied from https://github.com/lukeed/clsx and modified to suit the needs of tailwind-merge better.
- *
- * Specifically:
- * - Runtime code from https://github.com/lukeed/clsx/blob/v1.2.1/src/index.js
- * - TypeScript types from https://github.com/lukeed/clsx/blob/v1.2.1/clsx.d.ts
- *
- * Original code has MIT license: Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)
- */
-function twJoin() {
-  var index = 0;
-  var argument;
-  var resolvedValue;
-  var string = '';
-  while (index < arguments.length) {
-    if (argument = arguments[index++]) {
-      if (resolvedValue = toValue(argument)) {
-        string && (string += ' ');
-        string += resolvedValue;
+function joinCss(obj, separator = ';') {
+  let texts;
+  if (Array.isArray(obj)) {
+    texts = obj.filter((text) => text);
+  } else {
+    texts = [];
+    for (const prop in obj) {
+      if (obj[prop]) {
+        texts.push(`${prop}:${obj[prop]}`);
       }
     }
   }
-  return string;
-}
-function toValue(mix) {
-  if (typeof mix === 'string') {
-    return mix;
-  }
-  var resolvedValue;
-  var string = '';
-  for (var k = 0; k < mix.length; k++) {
-    if (mix[k]) {
-      if (resolvedValue = toValue(mix[k])) {
-        string && (string += ' ');
-        string += resolvedValue;
-      }
-    }
-  }
-  return string;
+  return texts.join(separator);
 }
 
-var CLASS_PART_SEPARATOR = '-';
-function createClassUtils(config) {
-  var classMap = createClassMap(config);
-  var conflictingClassGroups = config.conflictingClassGroups,
-    _config$conflictingCl = config.conflictingClassGroupModifiers,
-    conflictingClassGroupModifiers = _config$conflictingCl === void 0 ? {} : _config$conflictingCl;
-  function getClassGroupId(className) {
-    var classParts = className.split(CLASS_PART_SEPARATOR);
-    // Classes like `-inset-1` produce an empty string as first classPart. We assume that classes for negative values are used correctly and remove it from classParts.
-    if (classParts[0] === '' && classParts.length !== 1) {
-      classParts.shift();
-    }
-    return getGroupRecursive(classParts, classMap) || getGroupIdForArbitraryProperty(className);
-  }
-  function getConflictingClassGroupIds(classGroupId, hasPostfixModifier) {
-    var conflicts = conflictingClassGroups[classGroupId] || [];
-    if (hasPostfixModifier && conflictingClassGroupModifiers[classGroupId]) {
-      return [].concat(conflicts, conflictingClassGroupModifiers[classGroupId]);
-    }
-    return conflicts;
-  }
-  return {
-    getClassGroupId: getClassGroupId,
-    getConflictingClassGroupIds: getConflictingClassGroupIds
-  };
-}
-function getGroupRecursive(classParts, classPartObject) {
-  if (classParts.length === 0) {
-    return classPartObject.classGroupId;
-  }
-  var currentClassPart = classParts[0];
-  var nextClassPartObject = classPartObject.nextPart.get(currentClassPart);
-  var classGroupFromNextClassPart = nextClassPartObject ? getGroupRecursive(classParts.slice(1), nextClassPartObject) : undefined;
-  if (classGroupFromNextClassPart) {
-    return classGroupFromNextClassPart;
-  }
-  if (classPartObject.validators.length === 0) {
-    return undefined;
-  }
-  var classRest = classParts.join(CLASS_PART_SEPARATOR);
-  return classPartObject.validators.find(function (_ref) {
-    var validator = _ref.validator;
-    return validator(classRest);
-  })?.classGroupId;
-}
-var arbitraryPropertyRegex = /^\[(.+)\]$/;
-function getGroupIdForArbitraryProperty(className) {
-  if (arbitraryPropertyRegex.test(className)) {
-    var arbitraryPropertyClassName = arbitraryPropertyRegex.exec(className)[1];
-    var property = arbitraryPropertyClassName?.substring(0, arbitraryPropertyClassName.indexOf(':'));
-    if (property) {
-      // I use two dots here because one dot is used as prefix for class groups in plugins
-      return 'arbitrary..' + property;
-    }
-  }
-}
-/**
- * Exported for testing only
- */
-function createClassMap(config) {
-  var theme = config.theme,
-    prefix = config.prefix;
-  var classMap = {
-    nextPart: new Map(),
-    validators: []
-  };
-  var prefixedClassGroupEntries = getPrefixedClassGroupEntries(Object.entries(config.classGroups), prefix);
-  prefixedClassGroupEntries.forEach(function (_ref2) {
-    var classGroupId = _ref2[0],
-      classGroup = _ref2[1];
-    processClassesRecursively(classGroup, classMap, classGroupId, theme);
-  });
-  return classMap;
-}
-function processClassesRecursively(classGroup, classPartObject, classGroupId, theme) {
-  classGroup.forEach(function (classDefinition) {
-    if (typeof classDefinition === 'string') {
-      var classPartObjectToEdit = classDefinition === '' ? classPartObject : getPart(classPartObject, classDefinition);
-      classPartObjectToEdit.classGroupId = classGroupId;
-      return;
-    }
-    if (typeof classDefinition === 'function') {
-      if (isThemeGetter(classDefinition)) {
-        processClassesRecursively(classDefinition(theme), classPartObject, classGroupId, theme);
-        return;
-      }
-      classPartObject.validators.push({
-        validator: classDefinition,
-        classGroupId: classGroupId
-      });
-      return;
-    }
-    Object.entries(classDefinition).forEach(function (_ref3) {
-      var key = _ref3[0],
-        classGroup = _ref3[1];
-      processClassesRecursively(classGroup, getPart(classPartObject, key), classGroupId, theme);
-    });
-  });
-}
-function getPart(classPartObject, path) {
-  var currentClassPartObject = classPartObject;
-  path.split(CLASS_PART_SEPARATOR).forEach(function (pathPart) {
-    if (!currentClassPartObject.nextPart.has(pathPart)) {
-      currentClassPartObject.nextPart.set(pathPart, {
-        nextPart: new Map(),
-        validators: []
-      });
-    }
-    currentClassPartObject = currentClassPartObject.nextPart.get(pathPart);
-  });
-  return currentClassPartObject;
-}
-function isThemeGetter(func) {
-  return func.isThemeGetter;
-}
-function getPrefixedClassGroupEntries(classGroupEntries, prefix) {
-  if (!prefix) {
-    return classGroupEntries;
-  }
-  return classGroupEntries.map(function (_ref4) {
-    var classGroupId = _ref4[0],
-      classGroup = _ref4[1];
-    var prefixedClassGroup = classGroup.map(function (classDefinition) {
-      if (typeof classDefinition === 'string') {
-        return prefix + classDefinition;
-      }
-      if (typeof classDefinition === 'object') {
-        return Object.fromEntries(Object.entries(classDefinition).map(function (_ref5) {
-          var key = _ref5[0],
-            value = _ref5[1];
-          return [prefix + key, value];
-        }));
-      }
-      return classDefinition;
-    });
-    return [classGroupId, prefixedClassGroup];
-  });
-}
+function getStyles(style, size, pull, fw) {
+  let float;
+  let width;
+  const height = '1em';
+  let lineHeight;
+  let fontSize;
+  let textAlign;
+  let verticalAlign = '-.125em';
+  const overflow = 'visible';
 
-// LRU cache inspired from hashlru (https://github.com/dominictarr/hashlru/blob/v1.0.4/index.js) but object replaced with Map to improve performance
-function createLruCache(maxCacheSize) {
-  if (maxCacheSize < 1) {
-    return {
-      get: function get() {
-        return undefined;
-      },
-      set: function set() {}
-    };
+  if (fw) {
+    textAlign = 'center';
+    width = '1.25em';
   }
-  var cacheSize = 0;
-  var cache = new Map();
-  var previousCache = new Map();
-  function update(key, value) {
-    cache.set(key, value);
-    cacheSize++;
-    if (cacheSize > maxCacheSize) {
-      cacheSize = 0;
-      previousCache = cache;
-      cache = new Map();
-    }
-  }
-  return {
-    get: function get(key) {
-      var value = cache.get(key);
-      if (value !== undefined) {
-        return value;
-      }
-      if ((value = previousCache.get(key)) !== undefined) {
-        update(key, value);
-        return value;
-      }
-    },
-    set: function set(key, value) {
-      if (cache.has(key)) {
-        cache.set(key, value);
-      } else {
-        update(key, value);
-      }
-    }
-  };
-}
 
-var IMPORTANT_MODIFIER = '!';
-function createSplitModifiers(config) {
-  var separator = config.separator || ':';
-  var isSeparatorSingleCharacter = separator.length === 1;
-  var firstSeparatorCharacter = separator[0];
-  var separatorLength = separator.length;
-  // splitModifiers inspired by https://github.com/tailwindlabs/tailwindcss/blob/v3.2.2/src/util/splitAtTopLevelOnly.js
-  return function splitModifiers(className) {
-    var modifiers = [];
-    var bracketDepth = 0;
-    var modifierStart = 0;
-    var postfixModifierPosition;
-    for (var index = 0; index < className.length; index++) {
-      var currentCharacter = className[index];
-      if (bracketDepth === 0) {
-        if (currentCharacter === firstSeparatorCharacter && (isSeparatorSingleCharacter || className.slice(index, index + separatorLength) === separator)) {
-          modifiers.push(className.slice(modifierStart, index));
-          modifierStart = index + separatorLength;
-          continue;
-        }
-        if (currentCharacter === '/') {
-          postfixModifierPosition = index;
-          continue;
-        }
-      }
-      if (currentCharacter === '[') {
-        bracketDepth++;
-      } else if (currentCharacter === ']') {
-        bracketDepth--;
-      }
-    }
-    var baseClassNameWithImportantModifier = modifiers.length === 0 ? className : className.substring(modifierStart);
-    var hasImportantModifier = baseClassNameWithImportantModifier.startsWith(IMPORTANT_MODIFIER);
-    var baseClassName = hasImportantModifier ? baseClassNameWithImportantModifier.substring(1) : baseClassNameWithImportantModifier;
-    var maybePostfixModifierPosition = postfixModifierPosition && postfixModifierPosition > modifierStart ? postfixModifierPosition - modifierStart : undefined;
-    return {
-      modifiers: modifiers,
-      hasImportantModifier: hasImportantModifier,
-      baseClassName: baseClassName,
-      maybePostfixModifierPosition: maybePostfixModifierPosition
-    };
-  };
-}
-/**
- * Sorts modifiers according to following schema:
- * - Predefined modifiers are sorted alphabetically
- * - When an arbitrary variant appears, it must be preserved which modifiers are before and after it
- */
-function sortModifiers(modifiers) {
-  if (modifiers.length <= 1) {
-    return modifiers;
+  if (pull) {
+    float = pull;
   }
-  var sortedModifiers = [];
-  var unsortedModifiers = [];
-  modifiers.forEach(function (modifier) {
-    var isArbitraryVariant = modifier[0] === '[';
-    if (isArbitraryVariant) {
-      sortedModifiers.push.apply(sortedModifiers, unsortedModifiers.sort().concat([modifier]));
-      unsortedModifiers = [];
+
+  if (size) {
+    if (size == 'lg') {
+      fontSize = '1.33333em';
+      lineHeight = '.75em';
+      verticalAlign = '-.225em';
+    } else if (size == 'xs') {
+      fontSize = '.75em';
+    } else if (size == 'sm') {
+      fontSize = '.875em';
     } else {
-      unsortedModifiers.push(modifier);
+      fontSize = size.replace('x', 'em');
     }
-  });
-  sortedModifiers.push.apply(sortedModifiers, unsortedModifiers.sort());
-  return sortedModifiers;
-}
-
-function createConfigUtils(config) {
-  return {
-    cache: createLruCache(config.cacheSize),
-    splitModifiers: createSplitModifiers(config),
-    ...createClassUtils(config)
-  };
-}
-
-var SPLIT_CLASSES_REGEX = /\s+/;
-function mergeClassList(classList, configUtils) {
-  var splitModifiers = configUtils.splitModifiers,
-    getClassGroupId = configUtils.getClassGroupId,
-    getConflictingClassGroupIds = configUtils.getConflictingClassGroupIds;
-  /**
-   * Set of classGroupIds in following format:
-   * `{importantModifier}{variantModifiers}{classGroupId}`
-   * @example 'float'
-   * @example 'hover:focus:bg-color'
-   * @example 'md:!pr'
-   */
-  var classGroupsInConflict = new Set();
-  return classList.trim().split(SPLIT_CLASSES_REGEX).map(function (originalClassName) {
-    var _splitModifiers = splitModifiers(originalClassName),
-      modifiers = _splitModifiers.modifiers,
-      hasImportantModifier = _splitModifiers.hasImportantModifier,
-      baseClassName = _splitModifiers.baseClassName,
-      maybePostfixModifierPosition = _splitModifiers.maybePostfixModifierPosition;
-    var classGroupId = getClassGroupId(maybePostfixModifierPosition ? baseClassName.substring(0, maybePostfixModifierPosition) : baseClassName);
-    var hasPostfixModifier = Boolean(maybePostfixModifierPosition);
-    if (!classGroupId) {
-      if (!maybePostfixModifierPosition) {
-        return {
-          isTailwindClass: false,
-          originalClassName: originalClassName
-        };
-      }
-      classGroupId = getClassGroupId(baseClassName);
-      if (!classGroupId) {
-        return {
-          isTailwindClass: false,
-          originalClassName: originalClassName
-        };
-      }
-      hasPostfixModifier = false;
-    }
-    var variantModifier = sortModifiers(modifiers).join(':');
-    var modifierId = hasImportantModifier ? variantModifier + IMPORTANT_MODIFIER : variantModifier;
-    return {
-      isTailwindClass: true,
-      modifierId: modifierId,
-      classGroupId: classGroupId,
-      originalClassName: originalClassName,
-      hasPostfixModifier: hasPostfixModifier
-    };
-  }).reverse()
-  // Last class in conflict wins, so we need to filter conflicting classes in reverse order.
-  .filter(function (parsed) {
-    if (!parsed.isTailwindClass) {
-      return true;
-    }
-    var modifierId = parsed.modifierId,
-      classGroupId = parsed.classGroupId,
-      hasPostfixModifier = parsed.hasPostfixModifier;
-    var classId = modifierId + classGroupId;
-    if (classGroupsInConflict.has(classId)) {
-      return false;
-    }
-    classGroupsInConflict.add(classId);
-    getConflictingClassGroupIds(classGroupId, hasPostfixModifier).forEach(function (group) {
-      return classGroupsInConflict.add(modifierId + group);
-    });
-    return true;
-  }).reverse().map(function (parsed) {
-    return parsed.originalClassName;
-  }).join(' ');
-}
-
-function createTailwindMerge() {
-  for (var _len = arguments.length, createConfig = new Array(_len), _key = 0; _key < _len; _key++) {
-    createConfig[_key] = arguments[_key];
   }
-  var configUtils;
-  var cacheGet;
-  var cacheSet;
-  var functionToCall = initTailwindMerge;
-  function initTailwindMerge(classList) {
-    var firstCreateConfig = createConfig[0],
-      restCreateConfig = createConfig.slice(1);
-    var config = restCreateConfig.reduce(function (previousConfig, createConfigCurrent) {
-      return createConfigCurrent(previousConfig);
-    }, firstCreateConfig());
-    configUtils = createConfigUtils(config);
-    cacheGet = configUtils.cache.get;
-    cacheSet = configUtils.cache.set;
-    functionToCall = tailwindMerge;
-    return tailwindMerge(classList);
-  }
-  function tailwindMerge(classList) {
-    var cachedResult = cacheGet(classList);
-    if (cachedResult) {
-      return cachedResult;
+
+  return joinCss([
+    joinCss({
+      float,
+      width,
+      height,
+      'line-height': lineHeight,
+      'font-size': fontSize,
+      'text-align': textAlign,
+      'vertical-align': verticalAlign,
+      'transform-origin': 'center',
+      overflow,
+    }),
+    style,
+  ]);
+}
+
+function getTransform(
+  scale,
+  translateX,
+  translateY,
+  rotate,
+  flip,
+  translateTimes = 1,
+  translateUnit = '',
+  rotateUnit = '',
+) {
+  let flipX = 1;
+  let flipY = 1;
+
+  if (flip) {
+    if (flip == 'horizontal') {
+      flipX = -1;
+    } else if (flip == 'vertical') {
+      flipY = -1;
+    } else {
+      flipX = flipY = -1;
     }
-    var result = mergeClassList(classList, configUtils);
-    cacheSet(classList, result);
-    return result;
   }
-  return function callTailwindMerge() {
-    return functionToCall(twJoin.apply(null, arguments));
-  };
+
+  return joinCss(
+    [
+      `translate(${parseNumber(translateX) * translateTimes}${translateUnit},${parseNumber(translateY) * translateTimes}${translateUnit})`,
+      `scale(${flipX * parseNumber(scale)},${flipY * parseNumber(scale)})`,
+      rotate && `rotate(${rotate}${rotateUnit})`,
+    ],
+    ' ',
+  );
 }
 
-function fromTheme(key) {
-  var themeGetter = function themeGetter(theme) {
-    return theme[key] || [];
-  };
-  themeGetter.isThemeGetter = true;
-  return themeGetter;
-}
+/* node_modules/svelte-fa/src/fa.svelte generated by Svelte v4.2.1 */
 
-var arbitraryValueRegex = /^\[(?:([a-z-]+):)?(.+)\]$/i;
-var fractionRegex = /^\d+\/\d+$/;
-var stringLengths = /*#__PURE__*/new Set(['px', 'full', 'screen']);
-var tshirtUnitRegex = /^(\d+(\.\d+)?)?(xs|sm|md|lg|xl)$/;
-var lengthUnitRegex = /\d+(%|px|r?em|[sdl]?v([hwib]|min|max)|pt|pc|in|cm|mm|cap|ch|ex|r?lh|cq(w|h|i|b|min|max))|\b(calc|min|max|clamp)\(.+\)|^0$/;
-// Shadow always begins with x and y offset separated by underscore
-var shadowRegex = /^-?((\d+)?\.?(\d+)[a-z]+|0)_-?((\d+)?\.?(\d+)[a-z]+|0)/;
-function isLength(value) {
-  return isNumber(value) || stringLengths.has(value) || fractionRegex.test(value) || isArbitraryLength(value);
-}
-function isArbitraryLength(value) {
-  return getIsArbitraryValue(value, 'length', isLengthOnly);
-}
-function isArbitrarySize(value) {
-  return getIsArbitraryValue(value, 'size', isNever);
-}
-function isArbitraryPosition(value) {
-  return getIsArbitraryValue(value, 'position', isNever);
-}
-function isArbitraryUrl(value) {
-  return getIsArbitraryValue(value, 'url', isUrl);
-}
-function isArbitraryNumber(value) {
-  return getIsArbitraryValue(value, 'number', isNumber);
-}
-function isNumber(value) {
-  return !Number.isNaN(Number(value));
-}
-function isPercent(value) {
-  return value.endsWith('%') && isNumber(value.slice(0, -1));
-}
-function isInteger(value) {
-  return isIntegerOnly(value) || getIsArbitraryValue(value, 'number', isIntegerOnly);
-}
-function isArbitraryValue(value) {
-  return arbitraryValueRegex.test(value);
-}
-function isAny() {
-  return true;
-}
-function isTshirtSize(value) {
-  return tshirtUnitRegex.test(value);
-}
-function isArbitraryShadow(value) {
-  return getIsArbitraryValue(value, '', isShadow);
-}
-function getIsArbitraryValue(value, label, testValue) {
-  var result = arbitraryValueRegex.exec(value);
-  if (result) {
-    if (result[1]) {
-      return result[1] === label;
-    }
-    return testValue(result[2]);
-  }
-  return false;
-}
-function isLengthOnly(value) {
-  return lengthUnitRegex.test(value);
-}
-function isNever() {
-  return false;
-}
-function isUrl(value) {
-  return value.startsWith('url(');
-}
-function isIntegerOnly(value) {
-  return Number.isInteger(Number(value));
-}
-function isShadow(value) {
-  return shadowRegex.test(value);
-}
-
-function getDefaultConfig() {
-  var colors = fromTheme('colors');
-  var spacing = fromTheme('spacing');
-  var blur = fromTheme('blur');
-  var brightness = fromTheme('brightness');
-  var borderColor = fromTheme('borderColor');
-  var borderRadius = fromTheme('borderRadius');
-  var borderSpacing = fromTheme('borderSpacing');
-  var borderWidth = fromTheme('borderWidth');
-  var contrast = fromTheme('contrast');
-  var grayscale = fromTheme('grayscale');
-  var hueRotate = fromTheme('hueRotate');
-  var invert = fromTheme('invert');
-  var gap = fromTheme('gap');
-  var gradientColorStops = fromTheme('gradientColorStops');
-  var gradientColorStopPositions = fromTheme('gradientColorStopPositions');
-  var inset = fromTheme('inset');
-  var margin = fromTheme('margin');
-  var opacity = fromTheme('opacity');
-  var padding = fromTheme('padding');
-  var saturate = fromTheme('saturate');
-  var scale = fromTheme('scale');
-  var sepia = fromTheme('sepia');
-  var skew = fromTheme('skew');
-  var space = fromTheme('space');
-  var translate = fromTheme('translate');
-  var getOverscroll = function getOverscroll() {
-    return ['auto', 'contain', 'none'];
-  };
-  var getOverflow = function getOverflow() {
-    return ['auto', 'hidden', 'clip', 'visible', 'scroll'];
-  };
-  var getSpacingWithAutoAndArbitrary = function getSpacingWithAutoAndArbitrary() {
-    return ['auto', isArbitraryValue, spacing];
-  };
-  var getSpacingWithArbitrary = function getSpacingWithArbitrary() {
-    return [isArbitraryValue, spacing];
-  };
-  var getLengthWithEmpty = function getLengthWithEmpty() {
-    return ['', isLength];
-  };
-  var getNumberWithAutoAndArbitrary = function getNumberWithAutoAndArbitrary() {
-    return ['auto', isNumber, isArbitraryValue];
-  };
-  var getPositions = function getPositions() {
-    return ['bottom', 'center', 'left', 'left-bottom', 'left-top', 'right', 'right-bottom', 'right-top', 'top'];
-  };
-  var getLineStyles = function getLineStyles() {
-    return ['solid', 'dashed', 'dotted', 'double', 'none'];
-  };
-  var getBlendModes = function getBlendModes() {
-    return ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity', 'plus-lighter'];
-  };
-  var getAlign = function getAlign() {
-    return ['start', 'end', 'center', 'between', 'around', 'evenly', 'stretch'];
-  };
-  var getZeroAndEmpty = function getZeroAndEmpty() {
-    return ['', '0', isArbitraryValue];
-  };
-  var getBreaks = function getBreaks() {
-    return ['auto', 'avoid', 'all', 'avoid-page', 'page', 'left', 'right', 'column'];
-  };
-  var getNumber = function getNumber() {
-    return [isNumber, isArbitraryNumber];
-  };
-  var getNumberAndArbitrary = function getNumberAndArbitrary() {
-    return [isNumber, isArbitraryValue];
-  };
-  return {
-    cacheSize: 500,
-    theme: {
-      colors: [isAny],
-      spacing: [isLength],
-      blur: ['none', '', isTshirtSize, isArbitraryValue],
-      brightness: getNumber(),
-      borderColor: [colors],
-      borderRadius: ['none', '', 'full', isTshirtSize, isArbitraryValue],
-      borderSpacing: getSpacingWithArbitrary(),
-      borderWidth: getLengthWithEmpty(),
-      contrast: getNumber(),
-      grayscale: getZeroAndEmpty(),
-      hueRotate: getNumberAndArbitrary(),
-      invert: getZeroAndEmpty(),
-      gap: getSpacingWithArbitrary(),
-      gradientColorStops: [colors],
-      gradientColorStopPositions: [isPercent, isArbitraryLength],
-      inset: getSpacingWithAutoAndArbitrary(),
-      margin: getSpacingWithAutoAndArbitrary(),
-      opacity: getNumber(),
-      padding: getSpacingWithArbitrary(),
-      saturate: getNumber(),
-      scale: getNumber(),
-      sepia: getZeroAndEmpty(),
-      skew: getNumberAndArbitrary(),
-      space: getSpacingWithArbitrary(),
-      translate: getSpacingWithArbitrary()
-    },
-    classGroups: {
-      // Layout
-      /**
-       * Aspect Ratio
-       * @see https://tailwindcss.com/docs/aspect-ratio
-       */
-      aspect: [{
-        aspect: ['auto', 'square', 'video', isArbitraryValue]
-      }],
-      /**
-       * Container
-       * @see https://tailwindcss.com/docs/container
-       */
-      container: ['container'],
-      /**
-       * Columns
-       * @see https://tailwindcss.com/docs/columns
-       */
-      columns: [{
-        columns: [isTshirtSize]
-      }],
-      /**
-       * Break After
-       * @see https://tailwindcss.com/docs/break-after
-       */
-      'break-after': [{
-        'break-after': getBreaks()
-      }],
-      /**
-       * Break Before
-       * @see https://tailwindcss.com/docs/break-before
-       */
-      'break-before': [{
-        'break-before': getBreaks()
-      }],
-      /**
-       * Break Inside
-       * @see https://tailwindcss.com/docs/break-inside
-       */
-      'break-inside': [{
-        'break-inside': ['auto', 'avoid', 'avoid-page', 'avoid-column']
-      }],
-      /**
-       * Box Decoration Break
-       * @see https://tailwindcss.com/docs/box-decoration-break
-       */
-      'box-decoration': [{
-        'box-decoration': ['slice', 'clone']
-      }],
-      /**
-       * Box Sizing
-       * @see https://tailwindcss.com/docs/box-sizing
-       */
-      box: [{
-        box: ['border', 'content']
-      }],
-      /**
-       * Display
-       * @see https://tailwindcss.com/docs/display
-       */
-      display: ['block', 'inline-block', 'inline', 'flex', 'inline-flex', 'table', 'inline-table', 'table-caption', 'table-cell', 'table-column', 'table-column-group', 'table-footer-group', 'table-header-group', 'table-row-group', 'table-row', 'flow-root', 'grid', 'inline-grid', 'contents', 'list-item', 'hidden'],
-      /**
-       * Floats
-       * @see https://tailwindcss.com/docs/float
-       */
-      "float": [{
-        "float": ['right', 'left', 'none']
-      }],
-      /**
-       * Clear
-       * @see https://tailwindcss.com/docs/clear
-       */
-      clear: [{
-        clear: ['left', 'right', 'both', 'none']
-      }],
-      /**
-       * Isolation
-       * @see https://tailwindcss.com/docs/isolation
-       */
-      isolation: ['isolate', 'isolation-auto'],
-      /**
-       * Object Fit
-       * @see https://tailwindcss.com/docs/object-fit
-       */
-      'object-fit': [{
-        object: ['contain', 'cover', 'fill', 'none', 'scale-down']
-      }],
-      /**
-       * Object Position
-       * @see https://tailwindcss.com/docs/object-position
-       */
-      'object-position': [{
-        object: [].concat(getPositions(), [isArbitraryValue])
-      }],
-      /**
-       * Overflow
-       * @see https://tailwindcss.com/docs/overflow
-       */
-      overflow: [{
-        overflow: getOverflow()
-      }],
-      /**
-       * Overflow X
-       * @see https://tailwindcss.com/docs/overflow
-       */
-      'overflow-x': [{
-        'overflow-x': getOverflow()
-      }],
-      /**
-       * Overflow Y
-       * @see https://tailwindcss.com/docs/overflow
-       */
-      'overflow-y': [{
-        'overflow-y': getOverflow()
-      }],
-      /**
-       * Overscroll Behavior
-       * @see https://tailwindcss.com/docs/overscroll-behavior
-       */
-      overscroll: [{
-        overscroll: getOverscroll()
-      }],
-      /**
-       * Overscroll Behavior X
-       * @see https://tailwindcss.com/docs/overscroll-behavior
-       */
-      'overscroll-x': [{
-        'overscroll-x': getOverscroll()
-      }],
-      /**
-       * Overscroll Behavior Y
-       * @see https://tailwindcss.com/docs/overscroll-behavior
-       */
-      'overscroll-y': [{
-        'overscroll-y': getOverscroll()
-      }],
-      /**
-       * Position
-       * @see https://tailwindcss.com/docs/position
-       */
-      position: ['static', 'fixed', 'absolute', 'relative', 'sticky'],
-      /**
-       * Top / Right / Bottom / Left
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      inset: [{
-        inset: [inset]
-      }],
-      /**
-       * Right / Left
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      'inset-x': [{
-        'inset-x': [inset]
-      }],
-      /**
-       * Top / Bottom
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      'inset-y': [{
-        'inset-y': [inset]
-      }],
-      /**
-       * Start
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      start: [{
-        start: [inset]
-      }],
-      /**
-       * End
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      end: [{
-        end: [inset]
-      }],
-      /**
-       * Top
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      top: [{
-        top: [inset]
-      }],
-      /**
-       * Right
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      right: [{
-        right: [inset]
-      }],
-      /**
-       * Bottom
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      bottom: [{
-        bottom: [inset]
-      }],
-      /**
-       * Left
-       * @see https://tailwindcss.com/docs/top-right-bottom-left
-       */
-      left: [{
-        left: [inset]
-      }],
-      /**
-       * Visibility
-       * @see https://tailwindcss.com/docs/visibility
-       */
-      visibility: ['visible', 'invisible', 'collapse'],
-      /**
-       * Z-Index
-       * @see https://tailwindcss.com/docs/z-index
-       */
-      z: [{
-        z: ['auto', isInteger]
-      }],
-      // Flexbox and Grid
-      /**
-       * Flex Basis
-       * @see https://tailwindcss.com/docs/flex-basis
-       */
-      basis: [{
-        basis: getSpacingWithAutoAndArbitrary()
-      }],
-      /**
-       * Flex Direction
-       * @see https://tailwindcss.com/docs/flex-direction
-       */
-      'flex-direction': [{
-        flex: ['row', 'row-reverse', 'col', 'col-reverse']
-      }],
-      /**
-       * Flex Wrap
-       * @see https://tailwindcss.com/docs/flex-wrap
-       */
-      'flex-wrap': [{
-        flex: ['wrap', 'wrap-reverse', 'nowrap']
-      }],
-      /**
-       * Flex
-       * @see https://tailwindcss.com/docs/flex
-       */
-      flex: [{
-        flex: ['1', 'auto', 'initial', 'none', isArbitraryValue]
-      }],
-      /**
-       * Flex Grow
-       * @see https://tailwindcss.com/docs/flex-grow
-       */
-      grow: [{
-        grow: getZeroAndEmpty()
-      }],
-      /**
-       * Flex Shrink
-       * @see https://tailwindcss.com/docs/flex-shrink
-       */
-      shrink: [{
-        shrink: getZeroAndEmpty()
-      }],
-      /**
-       * Order
-       * @see https://tailwindcss.com/docs/order
-       */
-      order: [{
-        order: ['first', 'last', 'none', isInteger]
-      }],
-      /**
-       * Grid Template Columns
-       * @see https://tailwindcss.com/docs/grid-template-columns
-       */
-      'grid-cols': [{
-        'grid-cols': [isAny]
-      }],
-      /**
-       * Grid Column Start / End
-       * @see https://tailwindcss.com/docs/grid-column
-       */
-      'col-start-end': [{
-        col: ['auto', {
-          span: ['full', isInteger]
-        }, isArbitraryValue]
-      }],
-      /**
-       * Grid Column Start
-       * @see https://tailwindcss.com/docs/grid-column
-       */
-      'col-start': [{
-        'col-start': getNumberWithAutoAndArbitrary()
-      }],
-      /**
-       * Grid Column End
-       * @see https://tailwindcss.com/docs/grid-column
-       */
-      'col-end': [{
-        'col-end': getNumberWithAutoAndArbitrary()
-      }],
-      /**
-       * Grid Template Rows
-       * @see https://tailwindcss.com/docs/grid-template-rows
-       */
-      'grid-rows': [{
-        'grid-rows': [isAny]
-      }],
-      /**
-       * Grid Row Start / End
-       * @see https://tailwindcss.com/docs/grid-row
-       */
-      'row-start-end': [{
-        row: ['auto', {
-          span: [isInteger]
-        }, isArbitraryValue]
-      }],
-      /**
-       * Grid Row Start
-       * @see https://tailwindcss.com/docs/grid-row
-       */
-      'row-start': [{
-        'row-start': getNumberWithAutoAndArbitrary()
-      }],
-      /**
-       * Grid Row End
-       * @see https://tailwindcss.com/docs/grid-row
-       */
-      'row-end': [{
-        'row-end': getNumberWithAutoAndArbitrary()
-      }],
-      /**
-       * Grid Auto Flow
-       * @see https://tailwindcss.com/docs/grid-auto-flow
-       */
-      'grid-flow': [{
-        'grid-flow': ['row', 'col', 'dense', 'row-dense', 'col-dense']
-      }],
-      /**
-       * Grid Auto Columns
-       * @see https://tailwindcss.com/docs/grid-auto-columns
-       */
-      'auto-cols': [{
-        'auto-cols': ['auto', 'min', 'max', 'fr', isArbitraryValue]
-      }],
-      /**
-       * Grid Auto Rows
-       * @see https://tailwindcss.com/docs/grid-auto-rows
-       */
-      'auto-rows': [{
-        'auto-rows': ['auto', 'min', 'max', 'fr', isArbitraryValue]
-      }],
-      /**
-       * Gap
-       * @see https://tailwindcss.com/docs/gap
-       */
-      gap: [{
-        gap: [gap]
-      }],
-      /**
-       * Gap X
-       * @see https://tailwindcss.com/docs/gap
-       */
-      'gap-x': [{
-        'gap-x': [gap]
-      }],
-      /**
-       * Gap Y
-       * @see https://tailwindcss.com/docs/gap
-       */
-      'gap-y': [{
-        'gap-y': [gap]
-      }],
-      /**
-       * Justify Content
-       * @see https://tailwindcss.com/docs/justify-content
-       */
-      'justify-content': [{
-        justify: ['normal'].concat(getAlign())
-      }],
-      /**
-       * Justify Items
-       * @see https://tailwindcss.com/docs/justify-items
-       */
-      'justify-items': [{
-        'justify-items': ['start', 'end', 'center', 'stretch']
-      }],
-      /**
-       * Justify Self
-       * @see https://tailwindcss.com/docs/justify-self
-       */
-      'justify-self': [{
-        'justify-self': ['auto', 'start', 'end', 'center', 'stretch']
-      }],
-      /**
-       * Align Content
-       * @see https://tailwindcss.com/docs/align-content
-       */
-      'align-content': [{
-        content: ['normal'].concat(getAlign(), ['baseline'])
-      }],
-      /**
-       * Align Items
-       * @see https://tailwindcss.com/docs/align-items
-       */
-      'align-items': [{
-        items: ['start', 'end', 'center', 'baseline', 'stretch']
-      }],
-      /**
-       * Align Self
-       * @see https://tailwindcss.com/docs/align-self
-       */
-      'align-self': [{
-        self: ['auto', 'start', 'end', 'center', 'stretch', 'baseline']
-      }],
-      /**
-       * Place Content
-       * @see https://tailwindcss.com/docs/place-content
-       */
-      'place-content': [{
-        'place-content': [].concat(getAlign(), ['baseline'])
-      }],
-      /**
-       * Place Items
-       * @see https://tailwindcss.com/docs/place-items
-       */
-      'place-items': [{
-        'place-items': ['start', 'end', 'center', 'baseline', 'stretch']
-      }],
-      /**
-       * Place Self
-       * @see https://tailwindcss.com/docs/place-self
-       */
-      'place-self': [{
-        'place-self': ['auto', 'start', 'end', 'center', 'stretch']
-      }],
-      // Spacing
-      /**
-       * Padding
-       * @see https://tailwindcss.com/docs/padding
-       */
-      p: [{
-        p: [padding]
-      }],
-      /**
-       * Padding X
-       * @see https://tailwindcss.com/docs/padding
-       */
-      px: [{
-        px: [padding]
-      }],
-      /**
-       * Padding Y
-       * @see https://tailwindcss.com/docs/padding
-       */
-      py: [{
-        py: [padding]
-      }],
-      /**
-       * Padding Start
-       * @see https://tailwindcss.com/docs/padding
-       */
-      ps: [{
-        ps: [padding]
-      }],
-      /**
-       * Padding End
-       * @see https://tailwindcss.com/docs/padding
-       */
-      pe: [{
-        pe: [padding]
-      }],
-      /**
-       * Padding Top
-       * @see https://tailwindcss.com/docs/padding
-       */
-      pt: [{
-        pt: [padding]
-      }],
-      /**
-       * Padding Right
-       * @see https://tailwindcss.com/docs/padding
-       */
-      pr: [{
-        pr: [padding]
-      }],
-      /**
-       * Padding Bottom
-       * @see https://tailwindcss.com/docs/padding
-       */
-      pb: [{
-        pb: [padding]
-      }],
-      /**
-       * Padding Left
-       * @see https://tailwindcss.com/docs/padding
-       */
-      pl: [{
-        pl: [padding]
-      }],
-      /**
-       * Margin
-       * @see https://tailwindcss.com/docs/margin
-       */
-      m: [{
-        m: [margin]
-      }],
-      /**
-       * Margin X
-       * @see https://tailwindcss.com/docs/margin
-       */
-      mx: [{
-        mx: [margin]
-      }],
-      /**
-       * Margin Y
-       * @see https://tailwindcss.com/docs/margin
-       */
-      my: [{
-        my: [margin]
-      }],
-      /**
-       * Margin Start
-       * @see https://tailwindcss.com/docs/margin
-       */
-      ms: [{
-        ms: [margin]
-      }],
-      /**
-       * Margin End
-       * @see https://tailwindcss.com/docs/margin
-       */
-      me: [{
-        me: [margin]
-      }],
-      /**
-       * Margin Top
-       * @see https://tailwindcss.com/docs/margin
-       */
-      mt: [{
-        mt: [margin]
-      }],
-      /**
-       * Margin Right
-       * @see https://tailwindcss.com/docs/margin
-       */
-      mr: [{
-        mr: [margin]
-      }],
-      /**
-       * Margin Bottom
-       * @see https://tailwindcss.com/docs/margin
-       */
-      mb: [{
-        mb: [margin]
-      }],
-      /**
-       * Margin Left
-       * @see https://tailwindcss.com/docs/margin
-       */
-      ml: [{
-        ml: [margin]
-      }],
-      /**
-       * Space Between X
-       * @see https://tailwindcss.com/docs/space
-       */
-      'space-x': [{
-        'space-x': [space]
-      }],
-      /**
-       * Space Between X Reverse
-       * @see https://tailwindcss.com/docs/space
-       */
-      'space-x-reverse': ['space-x-reverse'],
-      /**
-       * Space Between Y
-       * @see https://tailwindcss.com/docs/space
-       */
-      'space-y': [{
-        'space-y': [space]
-      }],
-      /**
-       * Space Between Y Reverse
-       * @see https://tailwindcss.com/docs/space
-       */
-      'space-y-reverse': ['space-y-reverse'],
-      // Sizing
-      /**
-       * Width
-       * @see https://tailwindcss.com/docs/width
-       */
-      w: [{
-        w: ['auto', 'min', 'max', 'fit', isArbitraryValue, spacing]
-      }],
-      /**
-       * Min-Width
-       * @see https://tailwindcss.com/docs/min-width
-       */
-      'min-w': [{
-        'min-w': ['min', 'max', 'fit', isArbitraryValue, isLength]
-      }],
-      /**
-       * Max-Width
-       * @see https://tailwindcss.com/docs/max-width
-       */
-      'max-w': [{
-        'max-w': ['0', 'none', 'full', 'min', 'max', 'fit', 'prose', {
-          screen: [isTshirtSize]
-        }, isTshirtSize, isArbitraryValue]
-      }],
-      /**
-       * Height
-       * @see https://tailwindcss.com/docs/height
-       */
-      h: [{
-        h: [isArbitraryValue, spacing, 'auto', 'min', 'max', 'fit']
-      }],
-      /**
-       * Min-Height
-       * @see https://tailwindcss.com/docs/min-height
-       */
-      'min-h': [{
-        'min-h': ['min', 'max', 'fit', isArbitraryValue, isLength]
-      }],
-      /**
-       * Max-Height
-       * @see https://tailwindcss.com/docs/max-height
-       */
-      'max-h': [{
-        'max-h': [isArbitraryValue, spacing, 'min', 'max', 'fit']
-      }],
-      // Typography
-      /**
-       * Font Size
-       * @see https://tailwindcss.com/docs/font-size
-       */
-      'font-size': [{
-        text: ['base', isTshirtSize, isArbitraryLength]
-      }],
-      /**
-       * Font Smoothing
-       * @see https://tailwindcss.com/docs/font-smoothing
-       */
-      'font-smoothing': ['antialiased', 'subpixel-antialiased'],
-      /**
-       * Font Style
-       * @see https://tailwindcss.com/docs/font-style
-       */
-      'font-style': ['italic', 'not-italic'],
-      /**
-       * Font Weight
-       * @see https://tailwindcss.com/docs/font-weight
-       */
-      'font-weight': [{
-        font: ['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'extrabold', 'black', isArbitraryNumber]
-      }],
-      /**
-       * Font Family
-       * @see https://tailwindcss.com/docs/font-family
-       */
-      'font-family': [{
-        font: [isAny]
-      }],
-      /**
-       * Font Variant Numeric
-       * @see https://tailwindcss.com/docs/font-variant-numeric
-       */
-      'fvn-normal': ['normal-nums'],
-      /**
-       * Font Variant Numeric
-       * @see https://tailwindcss.com/docs/font-variant-numeric
-       */
-      'fvn-ordinal': ['ordinal'],
-      /**
-       * Font Variant Numeric
-       * @see https://tailwindcss.com/docs/font-variant-numeric
-       */
-      'fvn-slashed-zero': ['slashed-zero'],
-      /**
-       * Font Variant Numeric
-       * @see https://tailwindcss.com/docs/font-variant-numeric
-       */
-      'fvn-figure': ['lining-nums', 'oldstyle-nums'],
-      /**
-       * Font Variant Numeric
-       * @see https://tailwindcss.com/docs/font-variant-numeric
-       */
-      'fvn-spacing': ['proportional-nums', 'tabular-nums'],
-      /**
-       * Font Variant Numeric
-       * @see https://tailwindcss.com/docs/font-variant-numeric
-       */
-      'fvn-fraction': ['diagonal-fractions', 'stacked-fractons'],
-      /**
-       * Letter Spacing
-       * @see https://tailwindcss.com/docs/letter-spacing
-       */
-      tracking: [{
-        tracking: ['tighter', 'tight', 'normal', 'wide', 'wider', 'widest', isArbitraryValue]
-      }],
-      /**
-       * Line Clamp
-       * @see https://tailwindcss.com/docs/line-clamp
-       */
-      'line-clamp': [{
-        'line-clamp': ['none', isNumber, isArbitraryNumber]
-      }],
-      /**
-       * Line Height
-       * @see https://tailwindcss.com/docs/line-height
-       */
-      leading: [{
-        leading: ['none', 'tight', 'snug', 'normal', 'relaxed', 'loose', isArbitraryValue, isLength]
-      }],
-      /**
-       * List Style Image
-       * @see https://tailwindcss.com/docs/list-style-image
-       */
-      'list-image': [{
-        'list-image': ['none', isArbitraryValue]
-      }],
-      /**
-       * List Style Type
-       * @see https://tailwindcss.com/docs/list-style-type
-       */
-      'list-style-type': [{
-        list: ['none', 'disc', 'decimal', isArbitraryValue]
-      }],
-      /**
-       * List Style Position
-       * @see https://tailwindcss.com/docs/list-style-position
-       */
-      'list-style-position': [{
-        list: ['inside', 'outside']
-      }],
-      /**
-       * Placeholder Color
-       * @deprecated since Tailwind CSS v3.0.0
-       * @see https://tailwindcss.com/docs/placeholder-color
-       */
-      'placeholder-color': [{
-        placeholder: [colors]
-      }],
-      /**
-       * Placeholder Opacity
-       * @see https://tailwindcss.com/docs/placeholder-opacity
-       */
-      'placeholder-opacity': [{
-        'placeholder-opacity': [opacity]
-      }],
-      /**
-       * Text Alignment
-       * @see https://tailwindcss.com/docs/text-align
-       */
-      'text-alignment': [{
-        text: ['left', 'center', 'right', 'justify', 'start', 'end']
-      }],
-      /**
-       * Text Color
-       * @see https://tailwindcss.com/docs/text-color
-       */
-      'text-color': [{
-        text: [colors]
-      }],
-      /**
-       * Text Opacity
-       * @see https://tailwindcss.com/docs/text-opacity
-       */
-      'text-opacity': [{
-        'text-opacity': [opacity]
-      }],
-      /**
-       * Text Decoration
-       * @see https://tailwindcss.com/docs/text-decoration
-       */
-      'text-decoration': ['underline', 'overline', 'line-through', 'no-underline'],
-      /**
-       * Text Decoration Style
-       * @see https://tailwindcss.com/docs/text-decoration-style
-       */
-      'text-decoration-style': [{
-        decoration: [].concat(getLineStyles(), ['wavy'])
-      }],
-      /**
-       * Text Decoration Thickness
-       * @see https://tailwindcss.com/docs/text-decoration-thickness
-       */
-      'text-decoration-thickness': [{
-        decoration: ['auto', 'from-font', isLength]
-      }],
-      /**
-       * Text Underline Offset
-       * @see https://tailwindcss.com/docs/text-underline-offset
-       */
-      'underline-offset': [{
-        'underline-offset': ['auto', isArbitraryValue, isLength]
-      }],
-      /**
-       * Text Decoration Color
-       * @see https://tailwindcss.com/docs/text-decoration-color
-       */
-      'text-decoration-color': [{
-        decoration: [colors]
-      }],
-      /**
-       * Text Transform
-       * @see https://tailwindcss.com/docs/text-transform
-       */
-      'text-transform': ['uppercase', 'lowercase', 'capitalize', 'normal-case'],
-      /**
-       * Text Overflow
-       * @see https://tailwindcss.com/docs/text-overflow
-       */
-      'text-overflow': ['truncate', 'text-ellipsis', 'text-clip'],
-      /**
-       * Text Indent
-       * @see https://tailwindcss.com/docs/text-indent
-       */
-      indent: [{
-        indent: getSpacingWithArbitrary()
-      }],
-      /**
-       * Vertical Alignment
-       * @see https://tailwindcss.com/docs/vertical-align
-       */
-      'vertical-align': [{
-        align: ['baseline', 'top', 'middle', 'bottom', 'text-top', 'text-bottom', 'sub', 'super', isArbitraryValue]
-      }],
-      /**
-       * Whitespace
-       * @see https://tailwindcss.com/docs/whitespace
-       */
-      whitespace: [{
-        whitespace: ['normal', 'nowrap', 'pre', 'pre-line', 'pre-wrap', 'break-spaces']
-      }],
-      /**
-       * Word Break
-       * @see https://tailwindcss.com/docs/word-break
-       */
-      "break": [{
-        "break": ['normal', 'words', 'all', 'keep']
-      }],
-      /**
-       * Hyphens
-       * @see https://tailwindcss.com/docs/hyphens
-       */
-      hyphens: [{
-        hyphens: ['none', 'manual', 'auto']
-      }],
-      /**
-       * Content
-       * @see https://tailwindcss.com/docs/content
-       */
-      content: [{
-        content: ['none', isArbitraryValue]
-      }],
-      // Backgrounds
-      /**
-       * Background Attachment
-       * @see https://tailwindcss.com/docs/background-attachment
-       */
-      'bg-attachment': [{
-        bg: ['fixed', 'local', 'scroll']
-      }],
-      /**
-       * Background Clip
-       * @see https://tailwindcss.com/docs/background-clip
-       */
-      'bg-clip': [{
-        'bg-clip': ['border', 'padding', 'content', 'text']
-      }],
-      /**
-       * Background Opacity
-       * @deprecated since Tailwind CSS v3.0.0
-       * @see https://tailwindcss.com/docs/background-opacity
-       */
-      'bg-opacity': [{
-        'bg-opacity': [opacity]
-      }],
-      /**
-       * Background Origin
-       * @see https://tailwindcss.com/docs/background-origin
-       */
-      'bg-origin': [{
-        'bg-origin': ['border', 'padding', 'content']
-      }],
-      /**
-       * Background Position
-       * @see https://tailwindcss.com/docs/background-position
-       */
-      'bg-position': [{
-        bg: [].concat(getPositions(), [isArbitraryPosition])
-      }],
-      /**
-       * Background Repeat
-       * @see https://tailwindcss.com/docs/background-repeat
-       */
-      'bg-repeat': [{
-        bg: ['no-repeat', {
-          repeat: ['', 'x', 'y', 'round', 'space']
-        }]
-      }],
-      /**
-       * Background Size
-       * @see https://tailwindcss.com/docs/background-size
-       */
-      'bg-size': [{
-        bg: ['auto', 'cover', 'contain', isArbitrarySize]
-      }],
-      /**
-       * Background Image
-       * @see https://tailwindcss.com/docs/background-image
-       */
-      'bg-image': [{
-        bg: ['none', {
-          'gradient-to': ['t', 'tr', 'r', 'br', 'b', 'bl', 'l', 'tl']
-        }, isArbitraryUrl]
-      }],
-      /**
-       * Background Color
-       * @see https://tailwindcss.com/docs/background-color
-       */
-      'bg-color': [{
-        bg: [colors]
-      }],
-      /**
-       * Gradient Color Stops From Position
-       * @see https://tailwindcss.com/docs/gradient-color-stops
-       */
-      'gradient-from-pos': [{
-        from: [gradientColorStopPositions]
-      }],
-      /**
-       * Gradient Color Stops Via Position
-       * @see https://tailwindcss.com/docs/gradient-color-stops
-       */
-      'gradient-via-pos': [{
-        via: [gradientColorStopPositions]
-      }],
-      /**
-       * Gradient Color Stops To Position
-       * @see https://tailwindcss.com/docs/gradient-color-stops
-       */
-      'gradient-to-pos': [{
-        to: [gradientColorStopPositions]
-      }],
-      /**
-       * Gradient Color Stops From
-       * @see https://tailwindcss.com/docs/gradient-color-stops
-       */
-      'gradient-from': [{
-        from: [gradientColorStops]
-      }],
-      /**
-       * Gradient Color Stops Via
-       * @see https://tailwindcss.com/docs/gradient-color-stops
-       */
-      'gradient-via': [{
-        via: [gradientColorStops]
-      }],
-      /**
-       * Gradient Color Stops To
-       * @see https://tailwindcss.com/docs/gradient-color-stops
-       */
-      'gradient-to': [{
-        to: [gradientColorStops]
-      }],
-      // Borders
-      /**
-       * Border Radius
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      rounded: [{
-        rounded: [borderRadius]
-      }],
-      /**
-       * Border Radius Start
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-s': [{
-        'rounded-s': [borderRadius]
-      }],
-      /**
-       * Border Radius End
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-e': [{
-        'rounded-e': [borderRadius]
-      }],
-      /**
-       * Border Radius Top
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-t': [{
-        'rounded-t': [borderRadius]
-      }],
-      /**
-       * Border Radius Right
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-r': [{
-        'rounded-r': [borderRadius]
-      }],
-      /**
-       * Border Radius Bottom
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-b': [{
-        'rounded-b': [borderRadius]
-      }],
-      /**
-       * Border Radius Left
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-l': [{
-        'rounded-l': [borderRadius]
-      }],
-      /**
-       * Border Radius Start Start
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-ss': [{
-        'rounded-ss': [borderRadius]
-      }],
-      /**
-       * Border Radius Start End
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-se': [{
-        'rounded-se': [borderRadius]
-      }],
-      /**
-       * Border Radius End End
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-ee': [{
-        'rounded-ee': [borderRadius]
-      }],
-      /**
-       * Border Radius End Start
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-es': [{
-        'rounded-es': [borderRadius]
-      }],
-      /**
-       * Border Radius Top Left
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-tl': [{
-        'rounded-tl': [borderRadius]
-      }],
-      /**
-       * Border Radius Top Right
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-tr': [{
-        'rounded-tr': [borderRadius]
-      }],
-      /**
-       * Border Radius Bottom Right
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-br': [{
-        'rounded-br': [borderRadius]
-      }],
-      /**
-       * Border Radius Bottom Left
-       * @see https://tailwindcss.com/docs/border-radius
-       */
-      'rounded-bl': [{
-        'rounded-bl': [borderRadius]
-      }],
-      /**
-       * Border Width
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w': [{
-        border: [borderWidth]
-      }],
-      /**
-       * Border Width X
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-x': [{
-        'border-x': [borderWidth]
-      }],
-      /**
-       * Border Width Y
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-y': [{
-        'border-y': [borderWidth]
-      }],
-      /**
-       * Border Width Start
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-s': [{
-        'border-s': [borderWidth]
-      }],
-      /**
-       * Border Width End
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-e': [{
-        'border-e': [borderWidth]
-      }],
-      /**
-       * Border Width Top
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-t': [{
-        'border-t': [borderWidth]
-      }],
-      /**
-       * Border Width Right
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-r': [{
-        'border-r': [borderWidth]
-      }],
-      /**
-       * Border Width Bottom
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-b': [{
-        'border-b': [borderWidth]
-      }],
-      /**
-       * Border Width Left
-       * @see https://tailwindcss.com/docs/border-width
-       */
-      'border-w-l': [{
-        'border-l': [borderWidth]
-      }],
-      /**
-       * Border Opacity
-       * @see https://tailwindcss.com/docs/border-opacity
-       */
-      'border-opacity': [{
-        'border-opacity': [opacity]
-      }],
-      /**
-       * Border Style
-       * @see https://tailwindcss.com/docs/border-style
-       */
-      'border-style': [{
-        border: [].concat(getLineStyles(), ['hidden'])
-      }],
-      /**
-       * Divide Width X
-       * @see https://tailwindcss.com/docs/divide-width
-       */
-      'divide-x': [{
-        'divide-x': [borderWidth]
-      }],
-      /**
-       * Divide Width X Reverse
-       * @see https://tailwindcss.com/docs/divide-width
-       */
-      'divide-x-reverse': ['divide-x-reverse'],
-      /**
-       * Divide Width Y
-       * @see https://tailwindcss.com/docs/divide-width
-       */
-      'divide-y': [{
-        'divide-y': [borderWidth]
-      }],
-      /**
-       * Divide Width Y Reverse
-       * @see https://tailwindcss.com/docs/divide-width
-       */
-      'divide-y-reverse': ['divide-y-reverse'],
-      /**
-       * Divide Opacity
-       * @see https://tailwindcss.com/docs/divide-opacity
-       */
-      'divide-opacity': [{
-        'divide-opacity': [opacity]
-      }],
-      /**
-       * Divide Style
-       * @see https://tailwindcss.com/docs/divide-style
-       */
-      'divide-style': [{
-        divide: getLineStyles()
-      }],
-      /**
-       * Border Color
-       * @see https://tailwindcss.com/docs/border-color
-       */
-      'border-color': [{
-        border: [borderColor]
-      }],
-      /**
-       * Border Color X
-       * @see https://tailwindcss.com/docs/border-color
-       */
-      'border-color-x': [{
-        'border-x': [borderColor]
-      }],
-      /**
-       * Border Color Y
-       * @see https://tailwindcss.com/docs/border-color
-       */
-      'border-color-y': [{
-        'border-y': [borderColor]
-      }],
-      /**
-       * Border Color Top
-       * @see https://tailwindcss.com/docs/border-color
-       */
-      'border-color-t': [{
-        'border-t': [borderColor]
-      }],
-      /**
-       * Border Color Right
-       * @see https://tailwindcss.com/docs/border-color
-       */
-      'border-color-r': [{
-        'border-r': [borderColor]
-      }],
-      /**
-       * Border Color Bottom
-       * @see https://tailwindcss.com/docs/border-color
-       */
-      'border-color-b': [{
-        'border-b': [borderColor]
-      }],
-      /**
-       * Border Color Left
-       * @see https://tailwindcss.com/docs/border-color
-       */
-      'border-color-l': [{
-        'border-l': [borderColor]
-      }],
-      /**
-       * Divide Color
-       * @see https://tailwindcss.com/docs/divide-color
-       */
-      'divide-color': [{
-        divide: [borderColor]
-      }],
-      /**
-       * Outline Style
-       * @see https://tailwindcss.com/docs/outline-style
-       */
-      'outline-style': [{
-        outline: [''].concat(getLineStyles())
-      }],
-      /**
-       * Outline Offset
-       * @see https://tailwindcss.com/docs/outline-offset
-       */
-      'outline-offset': [{
-        'outline-offset': [isArbitraryValue, isLength]
-      }],
-      /**
-       * Outline Width
-       * @see https://tailwindcss.com/docs/outline-width
-       */
-      'outline-w': [{
-        outline: [isLength]
-      }],
-      /**
-       * Outline Color
-       * @see https://tailwindcss.com/docs/outline-color
-       */
-      'outline-color': [{
-        outline: [colors]
-      }],
-      /**
-       * Ring Width
-       * @see https://tailwindcss.com/docs/ring-width
-       */
-      'ring-w': [{
-        ring: getLengthWithEmpty()
-      }],
-      /**
-       * Ring Width Inset
-       * @see https://tailwindcss.com/docs/ring-width
-       */
-      'ring-w-inset': ['ring-inset'],
-      /**
-       * Ring Color
-       * @see https://tailwindcss.com/docs/ring-color
-       */
-      'ring-color': [{
-        ring: [colors]
-      }],
-      /**
-       * Ring Opacity
-       * @see https://tailwindcss.com/docs/ring-opacity
-       */
-      'ring-opacity': [{
-        'ring-opacity': [opacity]
-      }],
-      /**
-       * Ring Offset Width
-       * @see https://tailwindcss.com/docs/ring-offset-width
-       */
-      'ring-offset-w': [{
-        'ring-offset': [isLength]
-      }],
-      /**
-       * Ring Offset Color
-       * @see https://tailwindcss.com/docs/ring-offset-color
-       */
-      'ring-offset-color': [{
-        'ring-offset': [colors]
-      }],
-      // Effects
-      /**
-       * Box Shadow
-       * @see https://tailwindcss.com/docs/box-shadow
-       */
-      shadow: [{
-        shadow: ['', 'inner', 'none', isTshirtSize, isArbitraryShadow]
-      }],
-      /**
-       * Box Shadow Color
-       * @see https://tailwindcss.com/docs/box-shadow-color
-       */
-      'shadow-color': [{
-        shadow: [isAny]
-      }],
-      /**
-       * Opacity
-       * @see https://tailwindcss.com/docs/opacity
-       */
-      opacity: [{
-        opacity: [opacity]
-      }],
-      /**
-       * Mix Blend Mode
-       * @see https://tailwindcss.com/docs/mix-blend-mode
-       */
-      'mix-blend': [{
-        'mix-blend': getBlendModes()
-      }],
-      /**
-       * Background Blend Mode
-       * @see https://tailwindcss.com/docs/background-blend-mode
-       */
-      'bg-blend': [{
-        'bg-blend': getBlendModes()
-      }],
-      // Filters
-      /**
-       * Filter
-       * @deprecated since Tailwind CSS v3.0.0
-       * @see https://tailwindcss.com/docs/filter
-       */
-      filter: [{
-        filter: ['', 'none']
-      }],
-      /**
-       * Blur
-       * @see https://tailwindcss.com/docs/blur
-       */
-      blur: [{
-        blur: [blur]
-      }],
-      /**
-       * Brightness
-       * @see https://tailwindcss.com/docs/brightness
-       */
-      brightness: [{
-        brightness: [brightness]
-      }],
-      /**
-       * Contrast
-       * @see https://tailwindcss.com/docs/contrast
-       */
-      contrast: [{
-        contrast: [contrast]
-      }],
-      /**
-       * Drop Shadow
-       * @see https://tailwindcss.com/docs/drop-shadow
-       */
-      'drop-shadow': [{
-        'drop-shadow': ['', 'none', isTshirtSize, isArbitraryValue]
-      }],
-      /**
-       * Grayscale
-       * @see https://tailwindcss.com/docs/grayscale
-       */
-      grayscale: [{
-        grayscale: [grayscale]
-      }],
-      /**
-       * Hue Rotate
-       * @see https://tailwindcss.com/docs/hue-rotate
-       */
-      'hue-rotate': [{
-        'hue-rotate': [hueRotate]
-      }],
-      /**
-       * Invert
-       * @see https://tailwindcss.com/docs/invert
-       */
-      invert: [{
-        invert: [invert]
-      }],
-      /**
-       * Saturate
-       * @see https://tailwindcss.com/docs/saturate
-       */
-      saturate: [{
-        saturate: [saturate]
-      }],
-      /**
-       * Sepia
-       * @see https://tailwindcss.com/docs/sepia
-       */
-      sepia: [{
-        sepia: [sepia]
-      }],
-      /**
-       * Backdrop Filter
-       * @deprecated since Tailwind CSS v3.0.0
-       * @see https://tailwindcss.com/docs/backdrop-filter
-       */
-      'backdrop-filter': [{
-        'backdrop-filter': ['', 'none']
-      }],
-      /**
-       * Backdrop Blur
-       * @see https://tailwindcss.com/docs/backdrop-blur
-       */
-      'backdrop-blur': [{
-        'backdrop-blur': [blur]
-      }],
-      /**
-       * Backdrop Brightness
-       * @see https://tailwindcss.com/docs/backdrop-brightness
-       */
-      'backdrop-brightness': [{
-        'backdrop-brightness': [brightness]
-      }],
-      /**
-       * Backdrop Contrast
-       * @see https://tailwindcss.com/docs/backdrop-contrast
-       */
-      'backdrop-contrast': [{
-        'backdrop-contrast': [contrast]
-      }],
-      /**
-       * Backdrop Grayscale
-       * @see https://tailwindcss.com/docs/backdrop-grayscale
-       */
-      'backdrop-grayscale': [{
-        'backdrop-grayscale': [grayscale]
-      }],
-      /**
-       * Backdrop Hue Rotate
-       * @see https://tailwindcss.com/docs/backdrop-hue-rotate
-       */
-      'backdrop-hue-rotate': [{
-        'backdrop-hue-rotate': [hueRotate]
-      }],
-      /**
-       * Backdrop Invert
-       * @see https://tailwindcss.com/docs/backdrop-invert
-       */
-      'backdrop-invert': [{
-        'backdrop-invert': [invert]
-      }],
-      /**
-       * Backdrop Opacity
-       * @see https://tailwindcss.com/docs/backdrop-opacity
-       */
-      'backdrop-opacity': [{
-        'backdrop-opacity': [opacity]
-      }],
-      /**
-       * Backdrop Saturate
-       * @see https://tailwindcss.com/docs/backdrop-saturate
-       */
-      'backdrop-saturate': [{
-        'backdrop-saturate': [saturate]
-      }],
-      /**
-       * Backdrop Sepia
-       * @see https://tailwindcss.com/docs/backdrop-sepia
-       */
-      'backdrop-sepia': [{
-        'backdrop-sepia': [sepia]
-      }],
-      // Tables
-      /**
-       * Border Collapse
-       * @see https://tailwindcss.com/docs/border-collapse
-       */
-      'border-collapse': [{
-        border: ['collapse', 'separate']
-      }],
-      /**
-       * Border Spacing
-       * @see https://tailwindcss.com/docs/border-spacing
-       */
-      'border-spacing': [{
-        'border-spacing': [borderSpacing]
-      }],
-      /**
-       * Border Spacing X
-       * @see https://tailwindcss.com/docs/border-spacing
-       */
-      'border-spacing-x': [{
-        'border-spacing-x': [borderSpacing]
-      }],
-      /**
-       * Border Spacing Y
-       * @see https://tailwindcss.com/docs/border-spacing
-       */
-      'border-spacing-y': [{
-        'border-spacing-y': [borderSpacing]
-      }],
-      /**
-       * Table Layout
-       * @see https://tailwindcss.com/docs/table-layout
-       */
-      'table-layout': [{
-        table: ['auto', 'fixed']
-      }],
-      /**
-       * Caption Side
-       * @see https://tailwindcss.com/docs/caption-side
-       */
-      caption: [{
-        caption: ['top', 'bottom']
-      }],
-      // Transitions and Animation
-      /**
-       * Tranisition Property
-       * @see https://tailwindcss.com/docs/transition-property
-       */
-      transition: [{
-        transition: ['none', 'all', '', 'colors', 'opacity', 'shadow', 'transform', isArbitraryValue]
-      }],
-      /**
-       * Transition Duration
-       * @see https://tailwindcss.com/docs/transition-duration
-       */
-      duration: [{
-        duration: getNumberAndArbitrary()
-      }],
-      /**
-       * Transition Timing Function
-       * @see https://tailwindcss.com/docs/transition-timing-function
-       */
-      ease: [{
-        ease: ['linear', 'in', 'out', 'in-out', isArbitraryValue]
-      }],
-      /**
-       * Transition Delay
-       * @see https://tailwindcss.com/docs/transition-delay
-       */
-      delay: [{
-        delay: getNumberAndArbitrary()
-      }],
-      /**
-       * Animation
-       * @see https://tailwindcss.com/docs/animation
-       */
-      animate: [{
-        animate: ['none', 'spin', 'ping', 'pulse', 'bounce', isArbitraryValue]
-      }],
-      // Transforms
-      /**
-       * Transform
-       * @see https://tailwindcss.com/docs/transform
-       */
-      transform: [{
-        transform: ['', 'gpu', 'none']
-      }],
-      /**
-       * Scale
-       * @see https://tailwindcss.com/docs/scale
-       */
-      scale: [{
-        scale: [scale]
-      }],
-      /**
-       * Scale X
-       * @see https://tailwindcss.com/docs/scale
-       */
-      'scale-x': [{
-        'scale-x': [scale]
-      }],
-      /**
-       * Scale Y
-       * @see https://tailwindcss.com/docs/scale
-       */
-      'scale-y': [{
-        'scale-y': [scale]
-      }],
-      /**
-       * Rotate
-       * @see https://tailwindcss.com/docs/rotate
-       */
-      rotate: [{
-        rotate: [isInteger, isArbitraryValue]
-      }],
-      /**
-       * Translate X
-       * @see https://tailwindcss.com/docs/translate
-       */
-      'translate-x': [{
-        'translate-x': [translate]
-      }],
-      /**
-       * Translate Y
-       * @see https://tailwindcss.com/docs/translate
-       */
-      'translate-y': [{
-        'translate-y': [translate]
-      }],
-      /**
-       * Skew X
-       * @see https://tailwindcss.com/docs/skew
-       */
-      'skew-x': [{
-        'skew-x': [skew]
-      }],
-      /**
-       * Skew Y
-       * @see https://tailwindcss.com/docs/skew
-       */
-      'skew-y': [{
-        'skew-y': [skew]
-      }],
-      /**
-       * Transform Origin
-       * @see https://tailwindcss.com/docs/transform-origin
-       */
-      'transform-origin': [{
-        origin: ['center', 'top', 'top-right', 'right', 'bottom-right', 'bottom', 'bottom-left', 'left', 'top-left', isArbitraryValue]
-      }],
-      // Interactivity
-      /**
-       * Accent Color
-       * @see https://tailwindcss.com/docs/accent-color
-       */
-      accent: [{
-        accent: ['auto', colors]
-      }],
-      /**
-       * Appearance
-       * @see https://tailwindcss.com/docs/appearance
-       */
-      appearance: ['appearance-none'],
-      /**
-       * Cursor
-       * @see https://tailwindcss.com/docs/cursor
-       */
-      cursor: [{
-        cursor: ['auto', 'default', 'pointer', 'wait', 'text', 'move', 'help', 'not-allowed', 'none', 'context-menu', 'progress', 'cell', 'crosshair', 'vertical-text', 'alias', 'copy', 'no-drop', 'grab', 'grabbing', 'all-scroll', 'col-resize', 'row-resize', 'n-resize', 'e-resize', 's-resize', 'w-resize', 'ne-resize', 'nw-resize', 'se-resize', 'sw-resize', 'ew-resize', 'ns-resize', 'nesw-resize', 'nwse-resize', 'zoom-in', 'zoom-out', isArbitraryValue]
-      }],
-      /**
-       * Caret Color
-       * @see https://tailwindcss.com/docs/just-in-time-mode#caret-color-utilities
-       */
-      'caret-color': [{
-        caret: [colors]
-      }],
-      /**
-       * Pointer Events
-       * @see https://tailwindcss.com/docs/pointer-events
-       */
-      'pointer-events': [{
-        'pointer-events': ['none', 'auto']
-      }],
-      /**
-       * Resize
-       * @see https://tailwindcss.com/docs/resize
-       */
-      resize: [{
-        resize: ['none', 'y', 'x', '']
-      }],
-      /**
-       * Scroll Behavior
-       * @see https://tailwindcss.com/docs/scroll-behavior
-       */
-      'scroll-behavior': [{
-        scroll: ['auto', 'smooth']
-      }],
-      /**
-       * Scroll Margin
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-m': [{
-        'scroll-m': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin X
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-mx': [{
-        'scroll-mx': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin Y
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-my': [{
-        'scroll-my': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin Start
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-ms': [{
-        'scroll-ms': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin End
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-me': [{
-        'scroll-me': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin Top
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-mt': [{
-        'scroll-mt': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin Right
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-mr': [{
-        'scroll-mr': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin Bottom
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-mb': [{
-        'scroll-mb': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Margin Left
-       * @see https://tailwindcss.com/docs/scroll-margin
-       */
-      'scroll-ml': [{
-        'scroll-ml': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-p': [{
-        'scroll-p': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding X
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-px': [{
-        'scroll-px': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding Y
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-py': [{
-        'scroll-py': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding Start
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-ps': [{
-        'scroll-ps': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding End
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-pe': [{
-        'scroll-pe': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding Top
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-pt': [{
-        'scroll-pt': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding Right
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-pr': [{
-        'scroll-pr': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding Bottom
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-pb': [{
-        'scroll-pb': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Padding Left
-       * @see https://tailwindcss.com/docs/scroll-padding
-       */
-      'scroll-pl': [{
-        'scroll-pl': getSpacingWithArbitrary()
-      }],
-      /**
-       * Scroll Snap Align
-       * @see https://tailwindcss.com/docs/scroll-snap-align
-       */
-      'snap-align': [{
-        snap: ['start', 'end', 'center', 'align-none']
-      }],
-      /**
-       * Scroll Snap Stop
-       * @see https://tailwindcss.com/docs/scroll-snap-stop
-       */
-      'snap-stop': [{
-        snap: ['normal', 'always']
-      }],
-      /**
-       * Scroll Snap Type
-       * @see https://tailwindcss.com/docs/scroll-snap-type
-       */
-      'snap-type': [{
-        snap: ['none', 'x', 'y', 'both']
-      }],
-      /**
-       * Scroll Snap Type Strictness
-       * @see https://tailwindcss.com/docs/scroll-snap-type
-       */
-      'snap-strictness': [{
-        snap: ['mandatory', 'proximity']
-      }],
-      /**
-       * Touch Action
-       * @see https://tailwindcss.com/docs/touch-action
-       */
-      touch: [{
-        touch: ['auto', 'none', 'pinch-zoom', 'manipulation', {
-          pan: ['x', 'left', 'right', 'y', 'up', 'down']
-        }]
-      }],
-      /**
-       * User Select
-       * @see https://tailwindcss.com/docs/user-select
-       */
-      select: [{
-        select: ['none', 'text', 'all', 'auto']
-      }],
-      /**
-       * Will Change
-       * @see https://tailwindcss.com/docs/will-change
-       */
-      'will-change': [{
-        'will-change': ['auto', 'scroll', 'contents', 'transform', isArbitraryValue]
-      }],
-      // SVG
-      /**
-       * Fill
-       * @see https://tailwindcss.com/docs/fill
-       */
-      fill: [{
-        fill: [colors, 'none']
-      }],
-      /**
-       * Stroke Width
-       * @see https://tailwindcss.com/docs/stroke-width
-       */
-      'stroke-w': [{
-        stroke: [isLength, isArbitraryNumber]
-      }],
-      /**
-       * Stroke
-       * @see https://tailwindcss.com/docs/stroke
-       */
-      stroke: [{
-        stroke: [colors, 'none']
-      }],
-      // Accessibility
-      /**
-       * Screen Readers
-       * @see https://tailwindcss.com/docs/screen-readers
-       */
-      sr: ['sr-only', 'not-sr-only']
-    },
-    conflictingClassGroups: {
-      overflow: ['overflow-x', 'overflow-y'],
-      overscroll: ['overscroll-x', 'overscroll-y'],
-      inset: ['inset-x', 'inset-y', 'start', 'end', 'top', 'right', 'bottom', 'left'],
-      'inset-x': ['right', 'left'],
-      'inset-y': ['top', 'bottom'],
-      flex: ['basis', 'grow', 'shrink'],
-      gap: ['gap-x', 'gap-y'],
-      p: ['px', 'py', 'ps', 'pe', 'pt', 'pr', 'pb', 'pl'],
-      px: ['pr', 'pl'],
-      py: ['pt', 'pb'],
-      m: ['mx', 'my', 'ms', 'me', 'mt', 'mr', 'mb', 'ml'],
-      mx: ['mr', 'ml'],
-      my: ['mt', 'mb'],
-      'font-size': ['leading'],
-      'fvn-normal': ['fvn-ordinal', 'fvn-slashed-zero', 'fvn-figure', 'fvn-spacing', 'fvn-fraction'],
-      'fvn-ordinal': ['fvn-normal'],
-      'fvn-slashed-zero': ['fvn-normal'],
-      'fvn-figure': ['fvn-normal'],
-      'fvn-spacing': ['fvn-normal'],
-      'fvn-fraction': ['fvn-normal'],
-      rounded: ['rounded-s', 'rounded-e', 'rounded-t', 'rounded-r', 'rounded-b', 'rounded-l', 'rounded-ss', 'rounded-se', 'rounded-ee', 'rounded-es', 'rounded-tl', 'rounded-tr', 'rounded-br', 'rounded-bl'],
-      'rounded-s': ['rounded-ss', 'rounded-es'],
-      'rounded-e': ['rounded-se', 'rounded-ee'],
-      'rounded-t': ['rounded-tl', 'rounded-tr'],
-      'rounded-r': ['rounded-tr', 'rounded-br'],
-      'rounded-b': ['rounded-br', 'rounded-bl'],
-      'rounded-l': ['rounded-tl', 'rounded-bl'],
-      'border-spacing': ['border-spacing-x', 'border-spacing-y'],
-      'border-w': ['border-w-s', 'border-w-e', 'border-w-t', 'border-w-r', 'border-w-b', 'border-w-l'],
-      'border-w-x': ['border-w-r', 'border-w-l'],
-      'border-w-y': ['border-w-t', 'border-w-b'],
-      'border-color': ['border-color-t', 'border-color-r', 'border-color-b', 'border-color-l'],
-      'border-color-x': ['border-color-r', 'border-color-l'],
-      'border-color-y': ['border-color-t', 'border-color-b'],
-      'scroll-m': ['scroll-mx', 'scroll-my', 'scroll-ms', 'scroll-me', 'scroll-mt', 'scroll-mr', 'scroll-mb', 'scroll-ml'],
-      'scroll-mx': ['scroll-mr', 'scroll-ml'],
-      'scroll-my': ['scroll-mt', 'scroll-mb'],
-      'scroll-p': ['scroll-px', 'scroll-py', 'scroll-ps', 'scroll-pe', 'scroll-pt', 'scroll-pr', 'scroll-pb', 'scroll-pl'],
-      'scroll-px': ['scroll-pr', 'scroll-pl'],
-      'scroll-py': ['scroll-pt', 'scroll-pb']
-    },
-    conflictingClassGroupModifiers: {
-      'font-size': ['leading']
-    }
-  };
-}
-
-var twMerge = /*#__PURE__*/createTailwindMerge(getDefaultConfig);
-
-/* node_modules/flowbite-svelte-icons/dist/ChartBars3FromLeftSolid.svelte generated by Svelte v4.2.1 */
-
-function create_fragment$8(ctx) {
+function create_if_block$1(ctx) {
 	let svg;
-	let path;
+	let g1;
+	let g0;
+	let g1_transform_value;
+	let g1_transform_origin_value;
+	let svg_id_value;
 	let svg_class_value;
-	let mounted;
-	let dispose;
+	let svg_viewBox_value;
 
-	let svg_levels = [
-		{ xmlns: "http://www.w3.org/2000/svg" },
-		{ fill: "currentColor" },
-		/*$$restProps*/ ctx[7],
-		{
-			class: svg_class_value = twMerge('shrink-0', /*sizes*/ ctx[6][/*size*/ ctx[0]], /*$$props*/ ctx[8].class)
-		},
-		{ role: /*role*/ ctx[1] },
-		{ "aria-label": /*ariaLabel*/ ctx[5] },
-		{ viewBox: "0 0 16 12" }
-	];
-
-	let svg_data = {};
-
-	for (let i = 0; i < svg_levels.length; i += 1) {
-		svg_data = assign(svg_data, svg_levels[i]);
+	function select_block_type(ctx, dirty) {
+		if (typeof /*i*/ ctx[10][4] == 'string') return create_if_block_1;
+		return create_else_block$1;
 	}
+
+	let current_block_type = select_block_type(ctx);
+	let if_block = current_block_type(ctx);
 
 	return {
 		c() {
 			svg = svg_element("svg");
-			path = svg_element("path");
-			attr(path, "stroke", "currentColor");
-			attr(path, "stroke-linecap", /*strokeLinecap*/ ctx[2]);
-			attr(path, "stroke-linejoin", /*strokeLinejoin*/ ctx[3]);
-			attr(path, "stroke-width", /*strokeWidth*/ ctx[4]);
-			attr(path, "d", "M1 1h14M1 6h14M1 11h7");
-			set_svg_attributes(svg, svg_data);
+			g1 = svg_element("g");
+			g0 = svg_element("g");
+			if_block.c();
+			attr(g0, "transform", /*transform*/ ctx[12]);
+			attr(g1, "transform", g1_transform_value = "translate(" + /*i*/ ctx[10][0] / 2 + " " + /*i*/ ctx[10][1] / 2 + ")");
+			attr(g1, "transform-origin", g1_transform_origin_value = "" + (/*i*/ ctx[10][0] / 4 + " 0"));
+			attr(svg, "id", svg_id_value = /*id*/ ctx[1] || undefined);
+			attr(svg, "class", svg_class_value = "svelte-fa " + /*clazz*/ ctx[0] + " svelte-1cj2gr0");
+			attr(svg, "style", /*s*/ ctx[11]);
+			attr(svg, "viewBox", svg_viewBox_value = "0 0 " + /*i*/ ctx[10][0] + " " + /*i*/ ctx[10][1]);
+			attr(svg, "aria-hidden", "true");
+			attr(svg, "role", "img");
+			attr(svg, "xmlns", "http://www.w3.org/2000/svg");
+			toggle_class(svg, "pulse", /*pulse*/ ctx[4]);
+			toggle_class(svg, "spin", /*spin*/ ctx[3]);
 		},
 		m(target, anchor) {
 			insert(target, svg, anchor);
-			append(svg, path);
+			append(svg, g1);
+			append(g1, g0);
+			if_block.m(g0, null);
+		},
+		p(ctx, dirty) {
+			if (current_block_type === (current_block_type = select_block_type(ctx)) && if_block) {
+				if_block.p(ctx, dirty);
+			} else {
+				if_block.d(1);
+				if_block = current_block_type(ctx);
 
-			if (!mounted) {
-				dispose = [
-					listen(svg, "click", /*click_handler*/ ctx[9]),
-					listen(svg, "keydown", /*keydown_handler*/ ctx[10]),
-					listen(svg, "keyup", /*keyup_handler*/ ctx[11]),
-					listen(svg, "focus", /*focus_handler*/ ctx[12]),
-					listen(svg, "blur", /*blur_handler*/ ctx[13]),
-					listen(svg, "mouseenter", /*mouseenter_handler*/ ctx[14]),
-					listen(svg, "mouseleave", /*mouseleave_handler*/ ctx[15]),
-					listen(svg, "mouseover", /*mouseover_handler*/ ctx[16]),
-					listen(svg, "mouseout", /*mouseout_handler*/ ctx[17])
-				];
+				if (if_block) {
+					if_block.c();
+					if_block.m(g0, null);
+				}
+			}
 
-				mounted = true;
+			if (dirty & /*transform*/ 4096) {
+				attr(g0, "transform", /*transform*/ ctx[12]);
+			}
+
+			if (dirty & /*i*/ 1024 && g1_transform_value !== (g1_transform_value = "translate(" + /*i*/ ctx[10][0] / 2 + " " + /*i*/ ctx[10][1] / 2 + ")")) {
+				attr(g1, "transform", g1_transform_value);
+			}
+
+			if (dirty & /*i*/ 1024 && g1_transform_origin_value !== (g1_transform_origin_value = "" + (/*i*/ ctx[10][0] / 4 + " 0"))) {
+				attr(g1, "transform-origin", g1_transform_origin_value);
+			}
+
+			if (dirty & /*id*/ 2 && svg_id_value !== (svg_id_value = /*id*/ ctx[1] || undefined)) {
+				attr(svg, "id", svg_id_value);
+			}
+
+			if (dirty & /*clazz*/ 1 && svg_class_value !== (svg_class_value = "svelte-fa " + /*clazz*/ ctx[0] + " svelte-1cj2gr0")) {
+				attr(svg, "class", svg_class_value);
+			}
+
+			if (dirty & /*s*/ 2048) {
+				attr(svg, "style", /*s*/ ctx[11]);
+			}
+
+			if (dirty & /*i*/ 1024 && svg_viewBox_value !== (svg_viewBox_value = "0 0 " + /*i*/ ctx[10][0] + " " + /*i*/ ctx[10][1])) {
+				attr(svg, "viewBox", svg_viewBox_value);
+			}
+
+			if (dirty & /*clazz, pulse*/ 17) {
+				toggle_class(svg, "pulse", /*pulse*/ ctx[4]);
+			}
+
+			if (dirty & /*clazz, spin*/ 9) {
+				toggle_class(svg, "spin", /*spin*/ ctx[3]);
 			}
 		},
-		p(ctx, [dirty]) {
-			if (dirty & /*strokeLinecap*/ 4) {
-				attr(path, "stroke-linecap", /*strokeLinecap*/ ctx[2]);
-			}
-
-			if (dirty & /*strokeLinejoin*/ 8) {
-				attr(path, "stroke-linejoin", /*strokeLinejoin*/ ctx[3]);
-			}
-
-			if (dirty & /*strokeWidth*/ 16) {
-				attr(path, "stroke-width", /*strokeWidth*/ ctx[4]);
-			}
-
-			set_svg_attributes(svg, svg_data = get_spread_update(svg_levels, [
-				{ xmlns: "http://www.w3.org/2000/svg" },
-				{ fill: "currentColor" },
-				dirty & /*$$restProps*/ 128 && /*$$restProps*/ ctx[7],
-				dirty & /*size, $$props*/ 257 && svg_class_value !== (svg_class_value = twMerge('shrink-0', /*sizes*/ ctx[6][/*size*/ ctx[0]], /*$$props*/ ctx[8].class)) && { class: svg_class_value },
-				dirty & /*role*/ 2 && { role: /*role*/ ctx[1] },
-				dirty & /*ariaLabel*/ 32 && { "aria-label": /*ariaLabel*/ ctx[5] },
-				{ viewBox: "0 0 16 12" }
-			]));
-		},
-		i: noop,
-		o: noop,
 		d(detaching) {
 			if (detaching) {
 				detach(svg);
 			}
 
-			mounted = false;
-			run_all(dispose);
+			if_block.d();
 		}
 	};
 }
 
-function instance$8($$self, $$props, $$invalidate) {
-	const omit_props_names = ["size","role","strokeLinecap","strokeLinejoin","strokeWidth","ariaLabel"];
-	let $$restProps = compute_rest_props($$props, omit_props_names);
-	const ctx = getContext("iconCtx") ?? {};
-
-	const sizes = {
-		xs: "w-3 h-3",
-		sm: "w-4 h-4",
-		md: "w-5 h-5",
-		lg: "w-6 h-6",
-		xl: "w-8 h-8"
-	};
-
-	let { size = ctx.size || "md" } = $$props;
-	let { role = ctx.role || "img" } = $$props;
-	let { strokeLinecap = ctx.strokeLinecap || "round" } = $$props;
-	let { strokeLinejoin = ctx.strokeLinejoin || "round" } = $$props;
-	let { strokeWidth = ctx.strokeWidth || "2" } = $$props;
-	let { ariaLabel = "chart bars 3 from left solid" } = $$props;
-
-	function click_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keydown_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keyup_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function focus_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function blur_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseenter_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseleave_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseover_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseout_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	$$self.$$set = $$new_props => {
-		$$invalidate(8, $$props = assign(assign({}, $$props), exclude_internal_props($$new_props)));
-		$$invalidate(7, $$restProps = compute_rest_props($$props, omit_props_names));
-		if ('size' in $$new_props) $$invalidate(0, size = $$new_props.size);
-		if ('role' in $$new_props) $$invalidate(1, role = $$new_props.role);
-		if ('strokeLinecap' in $$new_props) $$invalidate(2, strokeLinecap = $$new_props.strokeLinecap);
-		if ('strokeLinejoin' in $$new_props) $$invalidate(3, strokeLinejoin = $$new_props.strokeLinejoin);
-		if ('strokeWidth' in $$new_props) $$invalidate(4, strokeWidth = $$new_props.strokeWidth);
-		if ('ariaLabel' in $$new_props) $$invalidate(5, ariaLabel = $$new_props.ariaLabel);
-	};
-
-	$$props = exclude_internal_props($$props);
-
-	return [
-		size,
-		role,
-		strokeLinecap,
-		strokeLinejoin,
-		strokeWidth,
-		ariaLabel,
-		sizes,
-		$$restProps,
-		$$props,
-		click_handler,
-		keydown_handler,
-		keyup_handler,
-		focus_handler,
-		blur_handler,
-		mouseenter_handler,
-		mouseleave_handler,
-		mouseover_handler,
-		mouseout_handler
-	];
-}
-
-class ChartBars3FromLeftSolid extends SvelteComponent {
-	constructor(options) {
-		super();
-
-		init(this, options, instance$8, create_fragment$8, safe_not_equal, {
-			size: 0,
-			role: 1,
-			strokeLinecap: 2,
-			strokeLinejoin: 3,
-			strokeWidth: 4,
-			ariaLabel: 5
-		});
-	}
-}
-
-/* node_modules/flowbite-svelte-icons/dist/ChartSolid.svelte generated by Svelte v4.2.1 */
-
-function create_fragment$7(ctx) {
-	let svg;
-	let g;
+// (89:8) {:else}
+function create_else_block$1(ctx) {
 	let path0;
+	let path0_d_value;
+	let path0_fill_value;
+	let path0_fill_opacity_value;
+	let path0_transform_value;
 	let path1;
-	let svg_class_value;
-	let mounted;
-	let dispose;
-
-	let svg_levels = [
-		{ xmlns: "http://www.w3.org/2000/svg" },
-		{ fill: "currentColor" },
-		/*$$restProps*/ ctx[4],
-		{
-			class: svg_class_value = twMerge('shrink-0', /*sizes*/ ctx[3][/*size*/ ctx[0]], /*$$props*/ ctx[5].class)
-		},
-		{ role: /*role*/ ctx[1] },
-		{ "aria-label": /*ariaLabel*/ ctx[2] },
-		{ viewBox: "0 0 18 16" }
-	];
-
-	let svg_data = {};
-
-	for (let i = 0; i < svg_levels.length; i += 1) {
-		svg_data = assign(svg_data, svg_levels[i]);
-	}
+	let path1_d_value;
+	let path1_fill_value;
+	let path1_fill_opacity_value;
+	let path1_transform_value;
 
 	return {
 		c() {
-			svg = svg_element("svg");
-			g = svg_element("g");
 			path0 = svg_element("path");
 			path1 = svg_element("path");
-			attr(path0, "d", "M17 14H2V1a1 1 0 0 0-2 0v14a1 1 0 0 0 1 1h16a1 1 0 0 0 0-2Z");
-			attr(path1, "d", "M5 12a.999.999 0 0 0 .8-.4l2.432-3.244 2.213 1.476a1 1 0 0 0 1.412-.317l2.461-4.1 2.127 1.418a1 1 0 0 0 1.11-1.664l-3-2a1 1 0 0 0-1.412.317l-2.461 4.1-2.127-1.418A1 1 0 0 0 7.2 6.4l-3 4A1 1 0 0 0 5 12Z");
-			attr(g, "fill", "currentColor");
-			set_svg_attributes(svg, svg_data);
+			attr(path0, "d", path0_d_value = /*i*/ ctx[10][4][0]);
+			attr(path0, "fill", path0_fill_value = /*secondaryColor*/ ctx[6] || /*color*/ ctx[2] || 'currentColor');
+
+			attr(path0, "fill-opacity", path0_fill_opacity_value = /*swapOpacity*/ ctx[9] != false
+			? /*primaryOpacity*/ ctx[7]
+			: /*secondaryOpacity*/ ctx[8]);
+
+			attr(path0, "transform", path0_transform_value = "translate(" + /*i*/ ctx[10][0] / -2 + " " + /*i*/ ctx[10][1] / -2 + ")");
+			attr(path1, "d", path1_d_value = /*i*/ ctx[10][4][1]);
+			attr(path1, "fill", path1_fill_value = /*primaryColor*/ ctx[5] || /*color*/ ctx[2] || 'currentColor');
+
+			attr(path1, "fill-opacity", path1_fill_opacity_value = /*swapOpacity*/ ctx[9] != false
+			? /*secondaryOpacity*/ ctx[8]
+			: /*primaryOpacity*/ ctx[7]);
+
+			attr(path1, "transform", path1_transform_value = "translate(" + /*i*/ ctx[10][0] / -2 + " " + /*i*/ ctx[10][1] / -2 + ")");
 		},
 		m(target, anchor) {
-			insert(target, svg, anchor);
-			append(svg, g);
-			append(g, path0);
-			append(g, path1);
+			insert(target, path0, anchor);
+			insert(target, path1, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty & /*i*/ 1024 && path0_d_value !== (path0_d_value = /*i*/ ctx[10][4][0])) {
+				attr(path0, "d", path0_d_value);
+			}
 
-			if (!mounted) {
-				dispose = [
-					listen(svg, "click", /*click_handler*/ ctx[6]),
-					listen(svg, "keydown", /*keydown_handler*/ ctx[7]),
-					listen(svg, "keyup", /*keyup_handler*/ ctx[8]),
-					listen(svg, "focus", /*focus_handler*/ ctx[9]),
-					listen(svg, "blur", /*blur_handler*/ ctx[10]),
-					listen(svg, "mouseenter", /*mouseenter_handler*/ ctx[11]),
-					listen(svg, "mouseleave", /*mouseleave_handler*/ ctx[12]),
-					listen(svg, "mouseover", /*mouseover_handler*/ ctx[13]),
-					listen(svg, "mouseout", /*mouseout_handler*/ ctx[14])
-				];
+			if (dirty & /*secondaryColor, color*/ 68 && path0_fill_value !== (path0_fill_value = /*secondaryColor*/ ctx[6] || /*color*/ ctx[2] || 'currentColor')) {
+				attr(path0, "fill", path0_fill_value);
+			}
 
-				mounted = true;
+			if (dirty & /*swapOpacity, primaryOpacity, secondaryOpacity*/ 896 && path0_fill_opacity_value !== (path0_fill_opacity_value = /*swapOpacity*/ ctx[9] != false
+			? /*primaryOpacity*/ ctx[7]
+			: /*secondaryOpacity*/ ctx[8])) {
+				attr(path0, "fill-opacity", path0_fill_opacity_value);
+			}
+
+			if (dirty & /*i*/ 1024 && path0_transform_value !== (path0_transform_value = "translate(" + /*i*/ ctx[10][0] / -2 + " " + /*i*/ ctx[10][1] / -2 + ")")) {
+				attr(path0, "transform", path0_transform_value);
+			}
+
+			if (dirty & /*i*/ 1024 && path1_d_value !== (path1_d_value = /*i*/ ctx[10][4][1])) {
+				attr(path1, "d", path1_d_value);
+			}
+
+			if (dirty & /*primaryColor, color*/ 36 && path1_fill_value !== (path1_fill_value = /*primaryColor*/ ctx[5] || /*color*/ ctx[2] || 'currentColor')) {
+				attr(path1, "fill", path1_fill_value);
+			}
+
+			if (dirty & /*swapOpacity, secondaryOpacity, primaryOpacity*/ 896 && path1_fill_opacity_value !== (path1_fill_opacity_value = /*swapOpacity*/ ctx[9] != false
+			? /*secondaryOpacity*/ ctx[8]
+			: /*primaryOpacity*/ ctx[7])) {
+				attr(path1, "fill-opacity", path1_fill_opacity_value);
+			}
+
+			if (dirty & /*i*/ 1024 && path1_transform_value !== (path1_transform_value = "translate(" + /*i*/ ctx[10][0] / -2 + " " + /*i*/ ctx[10][1] / -2 + ")")) {
+				attr(path1, "transform", path1_transform_value);
 			}
 		},
-		p(ctx, [dirty]) {
-			set_svg_attributes(svg, svg_data = get_spread_update(svg_levels, [
-				{ xmlns: "http://www.w3.org/2000/svg" },
-				{ fill: "currentColor" },
-				dirty & /*$$restProps*/ 16 && /*$$restProps*/ ctx[4],
-				dirty & /*size, $$props*/ 33 && svg_class_value !== (svg_class_value = twMerge('shrink-0', /*sizes*/ ctx[3][/*size*/ ctx[0]], /*$$props*/ ctx[5].class)) && { class: svg_class_value },
-				dirty & /*role*/ 2 && { role: /*role*/ ctx[1] },
-				dirty & /*ariaLabel*/ 4 && { "aria-label": /*ariaLabel*/ ctx[2] },
-				{ viewBox: "0 0 18 16" }
-			]));
-		},
-		i: noop,
-		o: noop,
 		d(detaching) {
 			if (detaching) {
-				detach(svg);
+				detach(path0);
+				detach(path1);
 			}
-
-			mounted = false;
-			run_all(dispose);
 		}
 	};
 }
 
-function instance$7($$self, $$props, $$invalidate) {
-	const omit_props_names = ["size","role","ariaLabel"];
-	let $$restProps = compute_rest_props($$props, omit_props_names);
-	const ctx = getContext("iconCtx") ?? {};
-
-	const sizes = {
-		xs: "w-3 h-3",
-		sm: "w-4 h-4",
-		md: "w-5 h-5",
-		lg: "w-6 h-6",
-		xl: "w-8 h-8"
-	};
-
-	let { size = ctx.size || "md" } = $$props;
-	let { role = ctx.role || "img" } = $$props;
-	let { ariaLabel = "chart solid" } = $$props;
-
-	function click_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keydown_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keyup_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function focus_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function blur_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseenter_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseleave_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseover_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseout_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	$$self.$$set = $$new_props => {
-		$$invalidate(5, $$props = assign(assign({}, $$props), exclude_internal_props($$new_props)));
-		$$invalidate(4, $$restProps = compute_rest_props($$props, omit_props_names));
-		if ('size' in $$new_props) $$invalidate(0, size = $$new_props.size);
-		if ('role' in $$new_props) $$invalidate(1, role = $$new_props.role);
-		if ('ariaLabel' in $$new_props) $$invalidate(2, ariaLabel = $$new_props.ariaLabel);
-	};
-
-	$$props = exclude_internal_props($$props);
-
-	return [
-		size,
-		role,
-		ariaLabel,
-		sizes,
-		$$restProps,
-		$$props,
-		click_handler,
-		keydown_handler,
-		keyup_handler,
-		focus_handler,
-		blur_handler,
-		mouseenter_handler,
-		mouseleave_handler,
-		mouseover_handler,
-		mouseout_handler
-	];
-}
-
-class ChartSolid extends SvelteComponent {
-	constructor(options) {
-		super();
-		init(this, options, instance$7, create_fragment$7, safe_not_equal, { size: 0, role: 1, ariaLabel: 2 });
-	}
-}
-
-/* node_modules/flowbite-svelte-icons/dist/HomeSolid.svelte generated by Svelte v4.2.1 */
-
-function create_fragment$6(ctx) {
-	let svg;
+// (83:8) {#if typeof i[4] == 'string'}
+function create_if_block_1(ctx) {
 	let path;
-	let svg_class_value;
-	let mounted;
-	let dispose;
-
-	let svg_levels = [
-		{ xmlns: "http://www.w3.org/2000/svg" },
-		{ fill: "currentColor" },
-		/*$$restProps*/ ctx[4],
-		{
-			class: svg_class_value = twMerge('shrink-0', /*sizes*/ ctx[3][/*size*/ ctx[0]], /*$$props*/ ctx[5].class)
-		},
-		{ role: /*role*/ ctx[1] },
-		{ "aria-label": /*ariaLabel*/ ctx[2] },
-		{ viewBox: "0 0 20 20" }
-	];
-
-	let svg_data = {};
-
-	for (let i = 0; i < svg_levels.length; i += 1) {
-		svg_data = assign(svg_data, svg_levels[i]);
-	}
+	let path_d_value;
+	let path_fill_value;
+	let path_transform_value;
 
 	return {
 		c() {
-			svg = svg_element("svg");
 			path = svg_element("path");
-			attr(path, "fill", "currentColor");
-			attr(path, "d", "m19.707 9.293-2-2-7-7a1 1 0 0 0-1.414 0l-7 7-2 2a1 1 0 0 0 1.414 1.414L2 10.414V18a2 2 0 0 0 2 2h3a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h3a2 2 0 0 0 2-2v-7.586l.293.293a1 1 0 0 0 1.414-1.414Z");
-			set_svg_attributes(svg, svg_data);
+			attr(path, "d", path_d_value = /*i*/ ctx[10][4]);
+			attr(path, "fill", path_fill_value = /*color*/ ctx[2] || /*primaryColor*/ ctx[5] || 'currentColor');
+			attr(path, "transform", path_transform_value = "translate(" + /*i*/ ctx[10][0] / -2 + " " + /*i*/ ctx[10][1] / -2 + ")");
 		},
 		m(target, anchor) {
-			insert(target, svg, anchor);
-			append(svg, path);
+			insert(target, path, anchor);
+		},
+		p(ctx, dirty) {
+			if (dirty & /*i*/ 1024 && path_d_value !== (path_d_value = /*i*/ ctx[10][4])) {
+				attr(path, "d", path_d_value);
+			}
 
-			if (!mounted) {
-				dispose = [
-					listen(svg, "click", /*click_handler*/ ctx[6]),
-					listen(svg, "keydown", /*keydown_handler*/ ctx[7]),
-					listen(svg, "keyup", /*keyup_handler*/ ctx[8]),
-					listen(svg, "focus", /*focus_handler*/ ctx[9]),
-					listen(svg, "blur", /*blur_handler*/ ctx[10]),
-					listen(svg, "mouseenter", /*mouseenter_handler*/ ctx[11]),
-					listen(svg, "mouseleave", /*mouseleave_handler*/ ctx[12]),
-					listen(svg, "mouseover", /*mouseover_handler*/ ctx[13]),
-					listen(svg, "mouseout", /*mouseout_handler*/ ctx[14])
-				];
+			if (dirty & /*color, primaryColor*/ 36 && path_fill_value !== (path_fill_value = /*color*/ ctx[2] || /*primaryColor*/ ctx[5] || 'currentColor')) {
+				attr(path, "fill", path_fill_value);
+			}
 
-				mounted = true;
+			if (dirty & /*i*/ 1024 && path_transform_value !== (path_transform_value = "translate(" + /*i*/ ctx[10][0] / -2 + " " + /*i*/ ctx[10][1] / -2 + ")")) {
+				attr(path, "transform", path_transform_value);
 			}
 		},
+		d(detaching) {
+			if (detaching) {
+				detach(path);
+			}
+		}
+	};
+}
+
+function create_fragment$6(ctx) {
+	let if_block_anchor;
+	let if_block = /*i*/ ctx[10][4] && create_if_block$1(ctx);
+
+	return {
+		c() {
+			if (if_block) if_block.c();
+			if_block_anchor = empty();
+		},
+		m(target, anchor) {
+			if (if_block) if_block.m(target, anchor);
+			insert(target, if_block_anchor, anchor);
+		},
 		p(ctx, [dirty]) {
-			set_svg_attributes(svg, svg_data = get_spread_update(svg_levels, [
-				{ xmlns: "http://www.w3.org/2000/svg" },
-				{ fill: "currentColor" },
-				dirty & /*$$restProps*/ 16 && /*$$restProps*/ ctx[4],
-				dirty & /*size, $$props*/ 33 && svg_class_value !== (svg_class_value = twMerge('shrink-0', /*sizes*/ ctx[3][/*size*/ ctx[0]], /*$$props*/ ctx[5].class)) && { class: svg_class_value },
-				dirty & /*role*/ 2 && { role: /*role*/ ctx[1] },
-				dirty & /*ariaLabel*/ 4 && { "aria-label": /*ariaLabel*/ ctx[2] },
-				{ viewBox: "0 0 20 20" }
-			]));
+			if (/*i*/ ctx[10][4]) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+				} else {
+					if_block = create_if_block$1(ctx);
+					if_block.c();
+					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+				}
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
+			}
 		},
 		i: noop,
 		o: noop,
 		d(detaching) {
 			if (detaching) {
-				detach(svg);
+				detach(if_block_anchor);
 			}
 
-			mounted = false;
-			run_all(dispose);
+			if (if_block) if_block.d(detaching);
 		}
 	};
 }
 
 function instance$6($$self, $$props, $$invalidate) {
-	const omit_props_names = ["size","role","ariaLabel"];
-	let $$restProps = compute_rest_props($$props, omit_props_names);
-	const ctx = getContext("iconCtx") ?? {};
+	let { class: clazz = '' } = $$props;
+	let { id = '' } = $$props;
+	let { style = '' } = $$props;
+	let { icon } = $$props;
+	let { size = '' } = $$props;
+	let { color = '' } = $$props;
+	let { fw = false } = $$props;
+	let { pull = '' } = $$props;
+	let { scale = 1 } = $$props;
+	let { translateX = 0 } = $$props;
+	let { translateY = 0 } = $$props;
+	let { rotate = '' } = $$props;
+	let { flip = false } = $$props;
+	let { spin = false } = $$props;
+	let { pulse = false } = $$props;
+	let { primaryColor = '' } = $$props;
+	let { secondaryColor = '' } = $$props;
+	let { primaryOpacity = 1 } = $$props;
+	let { secondaryOpacity = 0.4 } = $$props;
+	let { swapOpacity = false } = $$props;
+	let i;
+	let s;
+	let transform;
 
-	const sizes = {
-		xs: "w-3 h-3",
-		sm: "w-4 h-4",
-		md: "w-5 h-5",
-		lg: "w-6 h-6",
-		xl: "w-8 h-8"
+	$$self.$$set = $$props => {
+		if ('class' in $$props) $$invalidate(0, clazz = $$props.class);
+		if ('id' in $$props) $$invalidate(1, id = $$props.id);
+		if ('style' in $$props) $$invalidate(13, style = $$props.style);
+		if ('icon' in $$props) $$invalidate(14, icon = $$props.icon);
+		if ('size' in $$props) $$invalidate(15, size = $$props.size);
+		if ('color' in $$props) $$invalidate(2, color = $$props.color);
+		if ('fw' in $$props) $$invalidate(16, fw = $$props.fw);
+		if ('pull' in $$props) $$invalidate(17, pull = $$props.pull);
+		if ('scale' in $$props) $$invalidate(18, scale = $$props.scale);
+		if ('translateX' in $$props) $$invalidate(19, translateX = $$props.translateX);
+		if ('translateY' in $$props) $$invalidate(20, translateY = $$props.translateY);
+		if ('rotate' in $$props) $$invalidate(21, rotate = $$props.rotate);
+		if ('flip' in $$props) $$invalidate(22, flip = $$props.flip);
+		if ('spin' in $$props) $$invalidate(3, spin = $$props.spin);
+		if ('pulse' in $$props) $$invalidate(4, pulse = $$props.pulse);
+		if ('primaryColor' in $$props) $$invalidate(5, primaryColor = $$props.primaryColor);
+		if ('secondaryColor' in $$props) $$invalidate(6, secondaryColor = $$props.secondaryColor);
+		if ('primaryOpacity' in $$props) $$invalidate(7, primaryOpacity = $$props.primaryOpacity);
+		if ('secondaryOpacity' in $$props) $$invalidate(8, secondaryOpacity = $$props.secondaryOpacity);
+		if ('swapOpacity' in $$props) $$invalidate(9, swapOpacity = $$props.swapOpacity);
 	};
 
-	let { size = ctx.size || "md" } = $$props;
-	let { role = ctx.role || "img" } = $$props;
-	let { ariaLabel = "home solid" } = $$props;
+	$$self.$$.update = () => {
+		if ($$self.$$.dirty & /*icon*/ 16384) {
+			$$invalidate(10, i = icon && icon.icon || [0, 0, '', [], '']);
+		}
 
-	function click_handler(event) {
-		bubble.call(this, $$self, event);
-	}
+		if ($$self.$$.dirty & /*style, size, pull, fw*/ 237568) {
+			$$invalidate(11, s = getStyles(style, size, pull, fw));
+		}
 
-	function keydown_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keyup_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function focus_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function blur_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseenter_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseleave_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseover_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function mouseout_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	$$self.$$set = $$new_props => {
-		$$invalidate(5, $$props = assign(assign({}, $$props), exclude_internal_props($$new_props)));
-		$$invalidate(4, $$restProps = compute_rest_props($$props, omit_props_names));
-		if ('size' in $$new_props) $$invalidate(0, size = $$new_props.size);
-		if ('role' in $$new_props) $$invalidate(1, role = $$new_props.role);
-		if ('ariaLabel' in $$new_props) $$invalidate(2, ariaLabel = $$new_props.ariaLabel);
+		if ($$self.$$.dirty & /*scale, translateX, translateY, rotate, flip*/ 8126464) {
+			$$invalidate(12, transform = getTransform(scale, translateX, translateY, rotate, flip, 512));
+		}
 	};
-
-	$$props = exclude_internal_props($$props);
 
 	return [
+		clazz,
+		id,
+		color,
+		spin,
+		pulse,
+		primaryColor,
+		secondaryColor,
+		primaryOpacity,
+		secondaryOpacity,
+		swapOpacity,
+		i,
+		s,
+		transform,
+		style,
+		icon,
 		size,
-		role,
-		ariaLabel,
-		sizes,
-		$$restProps,
-		$$props,
-		click_handler,
-		keydown_handler,
-		keyup_handler,
-		focus_handler,
-		blur_handler,
-		mouseenter_handler,
-		mouseleave_handler,
-		mouseover_handler,
-		mouseout_handler
+		fw,
+		pull,
+		scale,
+		translateX,
+		translateY,
+		rotate,
+		flip
 	];
 }
 
-class HomeSolid extends SvelteComponent {
+class Fa extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance$6, create_fragment$6, safe_not_equal, { size: 0, role: 1, ariaLabel: 2 });
+
+		init(this, options, instance$6, create_fragment$6, safe_not_equal, {
+			class: 0,
+			id: 1,
+			style: 13,
+			icon: 14,
+			size: 15,
+			color: 2,
+			fw: 16,
+			pull: 17,
+			scale: 18,
+			translateX: 19,
+			translateY: 20,
+			rotate: 21,
+			flip: 22,
+			spin: 3,
+			pulse: 4,
+			primaryColor: 5,
+			secondaryColor: 6,
+			primaryOpacity: 7,
+			secondaryOpacity: 8,
+			swapOpacity: 9
+		});
+	}
+}
+
+var Fa$1 = Fa;
+
+var faChartPie = {
+  prefix: 'fas',
+  iconName: 'chart-pie',
+  icon: [576, 512, ["pie-chart"], "f200", "M304 240V16.6c0-9 7-16.6 16-16.6C443.7 0 544 100.3 544 224c0 9-7.6 16-16.6 16H304zM32 272C32 150.7 122.1 50.3 239 34.3c9.2-1.3 17 6.1 17 15.4V288L412.5 444.5c6.7 6.7 6.2 17.7-1.5 23.1C371.8 495.6 323.8 512 272 512C139.5 512 32 404.6 32 272zm526.4 16c9.3 0 16.6 7.8 15.4 17c-7.7 55.9-34.6 105.6-73.9 142.3c-6 5.6-15.4 5.2-21.2-.7L320 288H558.4z"]
+};
+var faChartLine = {
+  prefix: 'fas',
+  iconName: 'chart-line',
+  icon: [512, 512, ["line-chart"], "f201", "M64 64c0-17.7-14.3-32-32-32S0 46.3 0 64V400c0 44.2 35.8 80 80 80H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H80c-8.8 0-16-7.2-16-16V64zm406.6 86.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L320 210.7l-57.4-57.4c-12.5-12.5-32.8-12.5-45.3 0l-112 112c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L240 221.3l57.4 57.4c12.5 12.5 32.8 12.5 45.3 0l128-128z"]
+};
+var faHouse = {
+  prefix: 'fas',
+  iconName: 'house',
+  icon: [576, 512, [127968, 63498, 63500, "home", "home-alt", "home-lg-alt"], "f015", "M575.8 255.5c0 18-15 32.1-32 32.1h-32l.7 160.2c0 2.7-.2 5.4-.5 8.1V472c0 22.1-17.9 40-40 40H456c-1.1 0-2.2 0-3.3-.1c-1.4 .1-2.8 .1-4.2 .1H416 392c-22.1 0-40-17.9-40-40V448 384c0-17.7-14.3-32-32-32H256c-17.7 0-32 14.3-32 32v64 24c0 22.1-17.9 40-40 40H160 128.1c-1.5 0-3-.1-4.5-.2c-1.2 .1-2.4 .2-3.6 .2H104c-22.1 0-40-17.9-40-40V360c0-.9 0-1.9 .1-2.8V287.6H32c-18 0-32-14-32-32.1c0-9 3-17 10-24L266.4 8c7-7 15-8 22-8s15 2 21 7L564.8 231.5c8 7 12 15 11 24z"]
+};
+var faChartColumn = {
+  prefix: 'fas',
+  iconName: 'chart-column',
+  icon: [512, 512, [], "e0e3", "M32 32c17.7 0 32 14.3 32 32V400c0 8.8 7.2 16 16 16H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H80c-44.2 0-80-35.8-80-80V64C0 46.3 14.3 32 32 32zM160 224c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32s-32-14.3-32-32V256c0-17.7 14.3-32 32-32zm128-64V320c0 17.7-14.3 32-32 32s-32-14.3-32-32V160c0-17.7 14.3-32 32-32s32 14.3 32 32zm64 32c17.7 0 32 14.3 32 32v96c0 17.7-14.3 32-32 32s-32-14.3-32-32V224c0-17.7 14.3-32 32-32zM480 96V320c0 17.7-14.3 32-32 32s-32-14.3-32-32V96c0-17.7 14.3-32 32-32s32 14.3 32 32z"]
+};
+
+/* src/pages/Home.svelte generated by Svelte v4.2.1 */
+
+class Home extends SvelteComponent {
+	constructor(options) {
+		super();
+		init(this, options, null, null, safe_not_equal, {});
 	}
 }
 
@@ -4188,29 +1432,54 @@ class HW3 extends SvelteComponent {
 	}
 }
 
+/* src/pages/HW4.svelte generated by Svelte v4.2.1 */
+
+class HW4 extends SvelteComponent {
+	constructor(options) {
+		super();
+		init(this, options, null, null, safe_not_equal, {});
+	}
+}
+
+/* src/pages/RealData.svelte generated by Svelte v4.2.1 */
+
+class RealData extends SvelteComponent {
+	constructor(options) {
+		super();
+		init(this, options, null, null, safe_not_equal, {});
+	}
+}
+
 const Pages = [
     {
-        name: 'Home',
-        icon: HomeSolid
+        name: '首頁',
+        icon: faHouse,
+        page: Home
     },
     {
-        name: 'HW1',
-        icon: ChartSolid,
+        name: '作業 1',
+        icon: faChartLine,
         page: HW1
     },
     {
-        name: 'HW2',
-        icon: ChartSolid,
+        name: '作業 2',
+        icon: faChartLine,
         page: HW2
     },
     {
-        name: 'HW3',
-        icon: ChartSolid,
+        name: '作業 3',
+        icon: faChartColumn,
         page: HW3
     },
     {
-        name: 'HW4',
-        icon: ChartBars3FromLeftSolid
+        name: '作業 4',
+        icon: faChartPie,
+        page: HW4
+    },
+    {
+        name: '真實資料',
+        icon: faChartColumn,
+        page: RealData
     }
 ];
 
@@ -4223,25 +1492,23 @@ function get_each_context(ctx, list, i) {
 	return child_ctx;
 }
 
-// (11:2) {#each Pages as page, i}
+// (14:2) {#each Pages as page, i}
 function create_each_block(ctx) {
 	let li;
 	let a;
 	let span;
-	let switch_instance;
+	let fa;
 	let t;
 	let current;
 	let mounted;
 	let dispose;
-	var switch_value = /*page*/ ctx[2]['icon'];
 
-	function switch_props(ctx, dirty) {
-		return {};
-	}
-
-	if (switch_value) {
-		switch_instance = construct_svelte_component(switch_value, switch_props());
-	}
+	fa = new Fa$1({
+			props: {
+				class: "faicon",
+				icon: /*page*/ ctx[2]['icon']
+			}
+		});
 
 	function click_handler() {
 		return /*click_handler*/ ctx[1](/*page*/ ctx[2]);
@@ -4252,7 +1519,7 @@ function create_each_block(ctx) {
 			li = element("li");
 			a = element("a");
 			span = element("span");
-			if (switch_instance) create_component(switch_instance.$$.fragment);
+			create_component(fa.$$.fragment);
 			t = space();
 			attr(span, "class", "icon svelte-16gq4dj");
 			attr(a, "class", "px-2 svelte-16gq4dj");
@@ -4265,7 +1532,7 @@ function create_each_block(ctx) {
 			insert(target, li, anchor);
 			append(li, a);
 			append(a, span);
-			if (switch_instance) mount_component(switch_instance, span, null);
+			mount_component(fa, span, null);
 			append(li, t);
 			current = true;
 
@@ -4277,39 +1544,17 @@ function create_each_block(ctx) {
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
 
-			if (switch_value !== (switch_value = /*page*/ ctx[2]['icon'])) {
-				if (switch_instance) {
-					group_outros();
-					const old_component = switch_instance;
-
-					transition_out(old_component.$$.fragment, 1, 0, () => {
-						destroy_component(old_component, 1);
-					});
-
-					check_outros();
-				}
-
-				if (switch_value) {
-					switch_instance = construct_svelte_component(switch_value, switch_props());
-					create_component(switch_instance.$$.fragment);
-					transition_in(switch_instance.$$.fragment, 1);
-					mount_component(switch_instance, span, null);
-				} else {
-					switch_instance = null;
-				}
-			}
-
 			if (!current || dirty & /*nowViewing*/ 1) {
 				toggle_class(li, "active", /*nowViewing*/ ctx[0] == /*page*/ ctx[2]['name']);
 			}
 		},
 		i(local) {
 			if (current) return;
-			if (switch_instance) transition_in(switch_instance.$$.fragment, local);
+			transition_in(fa.$$.fragment, local);
 			current = true;
 		},
 		o(local) {
-			if (switch_instance) transition_out(switch_instance.$$.fragment, local);
+			transition_out(fa.$$.fragment, local);
 			current = false;
 		},
 		d(detaching) {
@@ -4317,7 +1562,7 @@ function create_each_block(ctx) {
 				detach(li);
 			}
 
-			if (switch_instance) destroy_component(switch_instance);
+			destroy_component(fa);
 			mounted = false;
 			dispose();
 		}
@@ -4420,7 +1665,13 @@ function create_fragment$2(ctx) {
 }
 
 function instance$2($$self, $$props, $$invalidate) {
-	let { nowViewing = 'Home' } = $$props;
+	let { nowViewing } = $$props;
+
+	onMount(() => {
+		for (let faicon of document.getElementsByClassName('faicon')) {
+			faicon.style.height = 'auto';
+		}
+	});
 
 	const click_handler = page => {
 		$$invalidate(0, nowViewing = page['name']);
@@ -4614,7 +1865,7 @@ function create_fragment$1(ctx) {
 
 function instance$1($$self, $$props, $$invalidate) {
 	let nowPage;
-	let { nowViewing = 'Home' } = $$props;
+	let { nowViewing } = $$props;
 
 	$$self.$$set = $$props => {
 		if ('nowViewing' in $$props) $$invalidate(0, nowViewing = $$props.nowViewing);
@@ -4731,7 +1982,7 @@ function create_fragment(ctx) {
 }
 
 function instance($$self, $$props, $$invalidate) {
-	let nowViewing = 'Home';
+	let nowViewing = '首頁';
 
 	function nav_nowViewing_binding(value) {
 		nowViewing = value;
