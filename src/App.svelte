@@ -1,5 +1,4 @@
 <script lang='ts'>
-	import { Router, Route } from 'svelte-routing'
 	import 'bulma/css/bulma.css'
 	import '@creativebulma/bulma-tooltip/dist/bulma-tooltip.min.css'
 	
@@ -8,7 +7,7 @@
 
 	import { Pages } from '@/Pages'
 
-	let nowViewing: typeof Pages[number]['name'] = 'Home'
+	let nowViewing: typeof Pages[number]['name'] = '首頁'
 </script>
 
 <div class="column is-8 is-offset-2">
