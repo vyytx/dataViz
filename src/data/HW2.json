@@ -1,52 +1,36 @@
 {
-	"trace1" : {
-		"mode": "markers+text",
-		"type": "scatter",
-		"name": "Team A",
-		"marker": {
-			"size": 10,
-			"color": "blue"
-		},
-		"dots": [
-			[1, 10, "A1"],
-			[2, 15, "A2"],
-			[3, 13, "A3"],
-			[4, 17, "A4"]
-		],
-		"textposition": "bottom center",
-		"textfont": {
-			"family": "Raleway, sans-serif",
-			"size": 10
-		}
-	},
-	"trace2" : {
-		"mode": "lines",
-		"type": "scatter",
-		"name": "Team B",
-		"marker": {
-			"color": "orange"
-		},
-		"dots": [
-			[2, 6, "B1"],
-			[3, 11, "B2"],
-			[5, 20, "B3"],
-			[6, 5, "B4"]
+	"taipei": {
+		"type": "bar",
+		"animals": [
+			{
+				"name": "lion",
+				"count": 20
+			},
+			{
+				"name": "tiger",
+				"count": 14
+			},
+			{
+				"name": "monkey",
+				"count": 23
+			}
 		]
 	},
-	"trace3" : {
-		"visible": true,
-		"mode": "lines+markers",
-		"type": "scatter",
-		"name": "Team C",
-		"marker": {
-			"size": 10,
-			"color": "green"
-		},
-		"dots": [
-			[1, 2, "C1"],
-			[3, 4, "C2"],
-			[5, 8, "C3"],
-			[7, 10, "C4"]
+	"taoyuan": {
+		"type": "bar",
+		"animals": [
+			{
+				"name": "lion",
+				"count": 17
+			},
+			{
+				"name": "tiger",
+				"count": 16
+			},
+			{
+				"name": "monkey",
+				"count": 26
+			}
 		]
 	}
 }

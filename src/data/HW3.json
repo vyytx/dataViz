@@ -1,36 +1,25 @@
 {
-	"taipei": {
-		"type": "bar",
-		"animals": [
-			{
-				"name": "lion",
-				"count": 20
-			},
-			{
-				"name": "tiger",
-				"count": 14
-			},
-			{
-				"name": "monkey",
-				"count": 23
-			}
-		]
-	},
-	"taoyuan": {
-		"type": "bar",
-		"animals": [
-			{
-				"name": "lion",
-				"count": 17
-			},
-			{
-				"name": "tiger",
-				"count": 16
-			},
-			{
-				"name": "monkey",
-				"count": 26
-			}
-		]
+	"ratio_names": ["作業", "出席", "期中評量", "期末評量"],
+	"subjects": {
+		"國文": {
+			"ratio": [10, 20, 30, 40],
+			"holesize": 0
+		},
+		"英文": {
+			"ratio": [20, 0, 40, 40],
+			"holesize": 0.5
+		},
+		"數學": {
+			"ratio": [0, 0, 50, 50],
+			"holesize": 0.6
+		},
+		"自然": {
+			"ratio": [25, 25, 25, 25],
+			"holesize": 0.7
+		},
+		"社會": {
+			"ratio" :[30, 20, 30, 30],
+			"holesize": 0.8
+		}
 	}
 }
