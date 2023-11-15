@@ -3,6 +3,6 @@
 	export let c = 'warning'
 </script>
 
-<span class="has-background-{c}" class:has-text-light={c != 'warning'}>
+<span class="has-background-{c}" class:has-text-white={c != 'warning'}>
 	<slot></slot>
 </span>
