@@ -31,7 +31,8 @@
 	}
 
 	.tabs {
-		padding: 1.5em 0;
+		padding-top: 3em;
+		padding-bottom: 1.5em;
 		margin-bottom: 0 !important;
 
 		& > ul {
