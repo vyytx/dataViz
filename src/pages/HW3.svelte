@@ -51,7 +51,7 @@
 
 <div id="myGraph" class="graph"></div>
 <div class="content is-medium pt-4">
-	<h1>HW3 Pie Chart</h1>
+	<h1>作業3 圓餅圖</h1>
 	<p>
 		以上圖表列出了某學生，<HL>國文</HL>、<HL>英文</HL>、<HL>數學</HL>、<HL>自然</HL>與<HL>社會</HL>，共五科目學期成績評分比例的假資料。
 		剛好這些科目無一例外都只會參採，<HL c='info'>期中評量</HL>、<HL c='info'>期末評量</HL>、
