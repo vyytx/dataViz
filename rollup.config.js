@@ -4,7 +4,8 @@ import commonjs from '@rollup/plugin-commonjs'
 import resolve from '@rollup/plugin-node-resolve'
 import livereload from 'rollup-plugin-livereload'
 import css from 'rollup-plugin-css-only'
- import json from '@rollup/plugin-json'
+import json from '@rollup/plugin-json'
+import dsv from '@rollup/plugin-dsv'
 
 import { spawn } from 'child_process'
 
@@ -61,6 +62,7 @@ export default {
 		json({
 			compact: true
 		}),
+		dsv(),
 		isDev && serve(),
 		isDev && livereload('public'),
 	],
