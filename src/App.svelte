@@ -10,7 +10,7 @@
 	let nowViewing: typeof Pages[number]['name'] = '首頁'
 </script>
 
-<div class="column is-8 is-offset-2">
+<div class="column is-8 is-offset-2 pb-6">
 	<Nav bind:nowViewing/>
 	<Viewer bind:nowViewing />
 </div>
@@ -37,5 +37,18 @@
 
 	div {
 		padding: 0 0;
+	}
+
+	:global(.graph) {
+		position: relative;
+		display: block;
+		left: 50%;
+		transform: translateX(-50%);
+
+		width: 60rem;
+		max-width: 100%;
+		height: 25rem;
+		max-height: 50vh;
+		min-height: 15vh;
 	}
 </style>
