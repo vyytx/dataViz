@@ -19,15 +19,20 @@
 		}
 	},
 	"trace2" : {
-		"mode": "lines",
+		"mode": "lines+text",
 		"type": "scatter",
 		"name": "Team B",
 		"dots": [
-			[2, 6, "B1"],
-			[3, 11, "B2"],
-			[5, 20, "B3"],
-			[6, 5, "B4"]
-		]
+			[2, 6, " B1"],
+			[3, 9, " B2"],
+			[5, 20, " B3"],
+			[6, 5, " B4"]
+		],
+		"textposition": "middle right",
+		"textfont": {
+			"family": "Consolas",
+			"size": 12
+		}
 	},
 	"trace3" : {
 		"visible": true,
