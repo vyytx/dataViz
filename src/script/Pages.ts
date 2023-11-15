@@ -3,9 +3,9 @@ import { faHouse, faChartLine, faChartColumn, faChartPie, type IconDefinition } 
 
 import Home from '../pages/Home.svelte'
 import HW1 from '../pages/HW1.svelte'
+import HW1_2 from '../pages/HW1_2.svelte'
 import HW2 from '../pages/HW2.svelte'
 import HW3 from '../pages/HW3.svelte'
-import HW4 from '../pages/HW4.svelte'
 import RealData from '../pages/RealData.svelte'
 
 type Page = {
@@ -26,19 +26,19 @@ export const Pages = [
 		page: HW1
 	},
 	{
-		name: '作業 2',
+		name: '作業 1-2',
 		icon: faChartLine,
+		page: HW1_2
+	},
+	{
+		name: '作業 2',
+		icon: faChartColumn,
 		page: HW2
 	},
 	{
 		name: '作業 3',
-		icon: faChartColumn,
-		page: HW3
-	},
-	{
-		name: '作業 4',
 		icon: faChartPie,
-		page: HW4
+		page: HW3
 	},
 	{
 		name: '真實資料',
